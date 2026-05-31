@@ -27,5 +27,9 @@
     "!node_modules/*/{CHANGELOG.md,README.md,readme.md,changelog.md}",
     "!node_modules/.cache"
   ],
+  "asarUnpack": [
+    "node_modules/nodejs-whisper/cpp/whisper.cpp/build/bin/whisper-cli",
+    "node_modules/nodejs-whisper/cpp/whisper.cpp/models/**"
+  ],
   "nativeRebuilder": "sequential"
 }

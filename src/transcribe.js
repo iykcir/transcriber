@@ -2,8 +2,19 @@ const { spawn, execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { app } = require('electron');
 
-const WHISPER_CPP_PATH = path.join(__dirname, '..', 'node_modules', 'nodejs-whisper', 'cpp', 'whisper.cpp');
+// In the packaged app, node_modules is inside app.asar and binaries inside it
+// cannot be spawned by the OS. electron-builder extracts asarUnpack entries to
+// app.asar.unpacked/ — use that path when packaged.
+function getWhisperCppPath() {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', 'nodejs-whisper', 'cpp', 'whisper.cpp');
+  }
+  return path.join(__dirname, '..', 'node_modules', 'nodejs-whisper', 'cpp', 'whisper.cpp');
+}
+
+const WHISPER_CPP_PATH = getWhisperCppPath();
 const WHISPER_CLI = path.join(WHISPER_CPP_PATH, 'build', 'bin', 'whisper-cli');
 const MODELS_DIR = path.join(WHISPER_CPP_PATH, 'models');
 
