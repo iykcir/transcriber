@@ -51,11 +51,11 @@ dropzone.addEventListener('drop', (e) => {
   e.preventDefault();
   dropzone.classList.remove('hover');
   const file = e.dataTransfer.files[0];
-  if (file) handleFile(file.path);
+  if (file) handleFile(api.getPathForFile(file));
 });
 
 fileInput.addEventListener('change', () => {
-  if (fileInput.files[0]) handleFile(fileInput.files[0].path);
+  if (fileInput.files[0]) handleFile(api.getPathForFile(fileInput.files[0]));
 });
 
 // ── File Handling ─────────────────────────────────────────────────────────────

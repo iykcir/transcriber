@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld('api', {
   getSettings: () => ipcRenderer.invoke('get-settings'),
@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('api', {
   savePDF: (data) => ipcRenderer.invoke('save-pdf', data),
   saveTXT: (data) => ipcRenderer.invoke('save-txt', data),
   showInFinder: (filePath) => ipcRenderer.invoke('show-in-finder', filePath),
+  getPathForFile: (file) => webUtils.getPathForFile(file),
   getFileInfo: (filePath) => ipcRenderer.invoke('get-file-info', filePath),
   getTheme: () => ipcRenderer.invoke('get-theme'),
   onFileSelected: (cb) => ipcRenderer.on('file-selected', (_, path) => cb(path)),
