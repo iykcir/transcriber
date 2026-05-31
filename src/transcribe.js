@@ -41,6 +41,10 @@ async function transcribeAudio(filePath, language, includeTimestamps, model = 'b
         timestamps_length: 60,
         wordTimestamps: includeTimestamps,
         splitOnWord: true,
+        // Metal GPU backend silently fails on Intel GPUs (falls back to BLAS
+        // but still produces empty output). Disable GPU on x64; keep it on
+        // arm64 where Metal works correctly and gives a large speedup.
+        noGpu: process.arch !== 'arm64',
       },
     });
   } catch (err) {
