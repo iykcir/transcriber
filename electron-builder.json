@@ -1,0 +1,30 @@
+{
+  "appId": "com.transcriber.app",
+  "productName": "Transcriber",
+  "directories": {
+    "output": "dist"
+  },
+  "mac": {
+    "category": "public.app-category.productivity",
+    "icon": "assets/icon.icns",
+    "hardenedRuntime": true,
+    "gatekeeperAssess": false,
+    "entitlements": "build/entitlements.mac.plist",
+    "entitlementsInherit": "build/entitlements.mac.plist",
+    "target": [
+      { "target": "dmg", "arch": ["arm64", "x64"] }
+    ]
+  },
+  "dmg": {
+    "title": "Transcriber ${version}",
+    "icon": "assets/icon.icns"
+  },
+  "files": [
+    "src/**/*",
+    "assets/**/*",
+    "node_modules/**/*",
+    "!node_modules/*/{CHANGELOG.md,README.md,readme.md,changelog.md}",
+    "!node_modules/.cache"
+  ],
+  "nativeRebuilder": "sequential"
+}

@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Transcriber</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f5f5f7;
+      --surface: rgba(255,255,255,0.75);
+      --surface-solid: #ffffff;
+      --border: rgba(0,0,0,0.10);
+      --text: #1d1d1f;
+      --text-secondary: #6e6e73;
+      --accent: #007aff;
+      --accent-hover: #0066d6;
+      --danger: #ff3b30;
+      --success: #34c759;
+      --drop-bg: rgba(0,122,255,0.05);
+      --drop-border: rgba(0,122,255,0.4);
+      --toolbar-bg: rgba(245,245,247,0.9);
+      --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1c1c1e;
+        --surface: rgba(44,44,46,0.8);
+        --surface-solid: #2c2c2e;
+        --border: rgba(255,255,255,0.10);
+        --text: #f5f5f7;
+        --text-secondary: #98989d;
+        --drop-bg: rgba(0,122,255,0.08);
+        --drop-border: rgba(0,122,255,0.5);
+        --toolbar-bg: rgba(28,28,30,0.9);
+        --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 4px 16px rgba(0,0,0,0.25);
+      }
+    }
+
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      -webkit-font-smoothing: antialiased;
+      user-select: none;
+    }
+
+    #titlebar {
+      height: 38px;
+      -webkit-app-region: drag;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      background: var(--toolbar-bg);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      position: relative;
+    }
+
+    #titlebar .title {
+      position: absolute;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      letter-spacing: 0.01em;
+    }
+
+    #titlebar .gear-btn {
+      -webkit-app-region: no-drag;
+      margin-left: auto;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: var(--text-secondary);
+      padding: 4px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      transition: background 0.15s, color 0.15s;
+    }
+
+    #titlebar .gear-btn:hover {
+      background: var(--border);
+      color: var(--text);
+    }
+
+    #app {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 38px);
+    }
+
+    #main {
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+      gap: 16px;
+    }
+
+    /* Drop zone */
+    #dropzone {
+      border: 2px dashed var(--border);
+      border-radius: 16px;
+      background: var(--surface);
+      backdrop-filter: blur(10px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      padding: 32px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s, transform 0.1s;
+      min-height: 180px;
+      flex-shrink: 0;
+    }
+
+    #dropzone:hover, #dropzone.hover {
+      border-color: var(--drop-border);
+      background: var(--drop-bg);
+    }
+
+    #dropzone.hover {
+      transform: scale(1.01);
+    }
+
+    #dropzone.has-file {
+      min-height: 80px;
+      padding: 16px 32px;
+      flex-direction: row;
+      gap: 16px;
+    }
+
+    #dropzone .mic-icon {
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+
+    #dropzone .drop-text {
+      text-align: center;
+    }
+
+    #dropzone .drop-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    #dropzone .drop-sub {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    #dropzone .file-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    #dropzone .file-name {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    #dropzone .file-meta {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 8px 18px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      font-family: inherit;
+      -webkit-app-region: no-drag;
+    }
+
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-primary:active { transform: scale(0.97); }
+    .btn-primary:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-secondary {
+      background: var(--surface-solid);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 7px 16px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      font-family: inherit;
+      -webkit-app-region: no-drag;
+    }
+
+    .btn-secondary:hover { background: var(--bg); }
+    .btn-secondary:active { transform: scale(0.97); }
+    .btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* Status area */
+    #status-area {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: var(--surface);
+      border-radius: 10px;
+      border: 1px solid var(--border);
+    }
+
+    #status-area.visible { display: flex; }
+
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .status-icon { flex-shrink: 0; }
+    #status-text { font-size: 13px; color: var(--text-secondary); flex: 1; }
+
+    /* Transcript area */
+    #transcript-section {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      display: none;
+    }
+
+    #transcript-section.visible { display: flex; }
+
+    #transcript-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 8px;
+    }
+
+    #transcript {
+      flex: 1;
+      min-height: 0;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      background: var(--surface-solid);
+      font-family: 'Georgia', 'Times New Roman', serif;
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--text);
+      resize: none;
+      outline: none;
+      overflow-y: auto;
+      -webkit-app-region: no-drag;
+      user-select: text;
+    }
+
+    #transcript:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(0,122,255,0.15);
+    }
+
+    /* Toolbar */
+    #toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 20px;
+      background: var(--toolbar-bg);
+      backdrop-filter: blur(20px);
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    #toolbar .spacer { flex: 1; }
+
+    /* Settings modal */
+    #settings-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #settings-overlay.visible { display: flex; }
+
+    #settings-panel {
+      background: var(--surface-solid);
+      border-radius: 16px;
+      padding: 24px;
+      width: 420px;
+      box-shadow: var(--shadow), 0 20px 60px rgba(0,0,0,0.2);
+      border: 1px solid var(--border);
+    }
+
+    #settings-panel h2 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 20px;
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 6px;
+    }
+
+    .form-group input[type="text"],
+    .form-group input[type="password"],
+    .form-group select {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(0,122,255,0.15);
+    }
+
+    .form-group.toggle-group {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .form-group.toggle-group label { margin: 0; }
+
+    .toggle {
+      position: relative;
+      width: 44px;
+      height: 24px;
+    }
+
+    .toggle input { opacity: 0; width: 0; height: 0; }
+
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      border-radius: 12px;
+      background: var(--border);
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      left: 3px;
+      top: 3px;
+      border-radius: 50%;
+      background: white;
+      transition: transform 0.2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+
+    .toggle input:checked + .toggle-slider { background: var(--accent); }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(20px); }
+
+    .settings-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 24px;
+    }
+
+    /* Notifications */
+    #toast {
+      position: fixed;
+      bottom: 70px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: rgba(40,40,40,0.95);
+      color: #fff;
+      padding: 10px 20px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      opacity: 0;
+      transition: opacity 0.2s, transform 0.2s;
+      pointer-events: none;
+      z-index: 200;
+      backdrop-filter: blur(8px);
+      white-space: nowrap;
+    }
+
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .char-count {
+      font-size: 11px;
+      color: var(--text-secondary);
+      text-align: right;
+      margin-top: 4px;
+    }
+
+    #transcribe-btn-area {
+      display: none;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    #transcribe-btn-area.visible { display: flex; }
+
+    #transcribe-btn {
+      padding: 10px 28px;
+      font-size: 15px;
+      border-radius: 10px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="titlebar">
+  <span class="title">Transcriber</span>
+  <button class="gear-btn" id="gear-btn" title="Settings">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="3"/>
+      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+    </svg>
+  </button>
+</div>
+
+<div id="app">
+  <div id="main">
+    <!-- Drop zone -->
+    <div id="dropzone">
+      <svg class="mic-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+        <line x1="12" y1="19" x2="12" y2="23"/>
+        <line x1="8" y1="23" x2="16" y2="23"/>
+      </svg>
+      <div class="drop-text">
+        <div class="drop-title">Drop audio file here or click to browse</div>
+        <div class="drop-sub">Supports MP3, MP4, M4A, WAV, OGG, WebM, FLAC · Max 25 MB</div>
+      </div>
+    </div>
+
+    <!-- Transcribe button -->
+    <div id="transcribe-btn-area">
+      <button class="btn-primary" id="transcribe-btn">Transcribe</button>
+    </div>
+
+    <!-- Status -->
+    <div id="status-area">
+      <div class="spinner" id="status-spinner"></div>
+      <svg class="status-icon" id="status-icon-ok" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#34c759" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+        <polyline points="20 6 9 17 4 12"/>
+      </svg>
+      <svg class="status-icon" id="status-icon-err" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:none">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+      </svg>
+      <span id="status-text">Transcribing…</span>
+    </div>
+
+    <!-- Transcript -->
+    <div id="transcript-section">
+      <div id="transcript-label">Transcript <span id="char-count" class="char-count"></span></div>
+      <textarea id="transcript" spellcheck="true" placeholder="Your transcript will appear here…"></textarea>
+    </div>
+  </div>
+
+  <!-- Bottom toolbar -->
+  <div id="toolbar">
+    <button class="btn-secondary" id="btn-copy" disabled>Copy</button>
+    <div class="spacer"></div>
+    <button class="btn-secondary" id="btn-txt" disabled>Save as TXT</button>
+    <button class="btn-primary" id="btn-pdf" disabled>Save as PDF</button>
+  </div>
+</div>
+
+<!-- Settings modal -->
+<div id="settings-overlay">
+  <div id="settings-panel">
+    <h2>Settings</h2>
+
+    <div class="form-group">
+      <label>Whisper Model</label>
+      <select id="model-select">
+        <option value="tiny">Tiny (75 MB) — fastest</option>
+        <option value="base" selected>Base (142 MB) — recommended</option>
+        <option value="small">Small (466 MB) — more accurate</option>
+        <option value="medium">Medium (1.5 GB) — best quality</option>
+      </select>
+      <div style="font-size:11px;color:var(--text-secondary);margin-top:5px;">
+        Model is downloaded on first use and cached locally. Requires <code>ffmpeg</code> (<code>brew install ffmpeg</code>).
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Language</label>
+      <select id="language-select">
+        <option value="auto">Auto-detect</option>
+        <option value="en">English</option>
+        <option value="es">Spanish</option>
+        <option value="fr">French</option>
+        <option value="de">German</option>
+        <option value="it">Italian</option>
+        <option value="pt">Portuguese</option>
+        <option value="nl">Dutch</option>
+        <option value="pl">Polish</option>
+        <option value="ru">Russian</option>
+        <option value="zh">Chinese</option>
+        <option value="ja">Japanese</option>
+        <option value="ko">Korean</option>
+        <option value="ar">Arabic</option>
+        <option value="hi">Hindi</option>
+      </select>
+    </div>
+
+    <div class="form-group toggle-group">
+      <label>Include timestamps in output</label>
+      <label class="toggle">
+        <input type="checkbox" id="timestamps-toggle" />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+
+    <div class="settings-footer">
+      <button class="btn-secondary" id="settings-cancel">Cancel</button>
+      <button class="btn-primary" id="settings-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<input type="file" id="file-input" accept=".mp3,.mp4,.m4a,.wav,.ogg,.webm,.flac" style="display:none" />
+
+<script src="renderer.js"></script>
+</body>
+</html>

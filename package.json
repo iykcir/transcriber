@@ -1,0 +1,50 @@
+{
+  "name": "transcriber",
+  "version": "1.0.0",
+  "description": "A macOS desktop app for transcribing audio files using OpenAI Whisper",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "pack": "electron-builder --dir"
+  },
+  "build": {
+    "appId": "com.transcriber.app",
+    "productName": "Transcriber",
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "assets/icon.icns",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ]
+    },
+    "dmg": {
+      "title": "Transcriber",
+      "icon": "assets/icon.icns"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "node_modules/**/*"
+    ],
+    "extraResources": [],
+    "nativeRebuilder": "sequential"
+  },
+  "dependencies": {
+    "nodejs-whisper": "^0.3.0",
+    "pdfkit": "^0.15.0"
+  },
+  "devDependencies": {
+    "canvas": "^3.2.3",
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
+    "electron-rebuild": "^3.2.9",
+    "playwright-core": "^1.60.0"
+  }
+}

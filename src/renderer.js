@@ -1,0 +1,200 @@
+/* global api */
+
+let currentFilePath = null;
+let currentFileName = null;
+
+// ── Elements ──────────────────────────────────────────────────────────────────
+const dropzone          = document.getElementById('dropzone');
+const fileInput         = document.getElementById('file-input');
+const statusArea        = document.getElementById('status-area');
+const statusSpinner     = document.getElementById('status-spinner');
+const statusIconOk      = document.getElementById('status-icon-ok');
+const statusIconErr     = document.getElementById('status-icon-err');
+const statusText        = document.getElementById('status-text');
+const transcriptSection = document.getElementById('transcript-section');
+const transcriptEl      = document.getElementById('transcript');
+const charCount         = document.getElementById('char-count');
+const transcribeBtnArea = document.getElementById('transcribe-btn-area');
+const transcribeBtn     = document.getElementById('transcribe-btn');
+const btnCopy           = document.getElementById('btn-copy');
+const btnTxt            = document.getElementById('btn-txt');
+const btnPdf            = document.getElementById('btn-pdf');
+const settingsOverlay   = document.getElementById('settings-overlay');
+const modelSelect       = document.getElementById('model-select');
+const languageSelect    = document.getElementById('language-select');
+const timestampsToggle  = document.getElementById('timestamps-toggle');
+const settingsSave      = document.getElementById('settings-save');
+const settingsCancel    = document.getElementById('settings-cancel');
+const gearBtn           = document.getElementById('gear-btn');
+const toast             = document.getElementById('toast');
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg, duration = 2500) {
+  clearTimeout(toastTimer);
+  toast.textContent = msg;
+  toast.classList.add('show');
+  toastTimer = setTimeout(() => toast.classList.remove('show'), duration);
+}
+
+// ── Drop Zone ─────────────────────────────────────────────────────────────────
+dropzone.addEventListener('click', () => fileInput.click());
+
+dropzone.addEventListener('dragover', (e) => {
+  e.preventDefault();
+  dropzone.classList.add('hover');
+});
+
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('hover'));
+
+dropzone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropzone.classList.remove('hover');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file.path);
+});
+
+fileInput.addEventListener('change', () => {
+  if (fileInput.files[0]) handleFile(fileInput.files[0].path);
+});
+
+// ── File Handling ─────────────────────────────────────────────────────────────
+async function handleFile(filePath) {
+  let info;
+  try {
+    info = await api.getFileInfo(filePath);
+  } catch (e) {
+    showStatus('error', `Could not read file: ${e.message}`);
+    return;
+  }
+
+  const sizeMB = (info.size / 1024 / 1024).toFixed(1);
+  if (info.size > 500 * 1024 * 1024) {
+    showStatus('error', 'File exceeds 500 MB limit.');
+    return;
+  }
+
+  currentFilePath = filePath;
+  currentFileName = info.name.replace(/\.[^.]+$/, '');
+
+  dropzone.classList.add('has-file');
+  dropzone.innerHTML = `
+    <svg class="mic-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+      <line x1="12" y1="19" x2="12" y2="23"/>
+      <line x1="8" y1="23" x2="16" y2="23"/>
+    </svg>
+    <div class="file-info">
+      <div class="file-name">${info.name}</div>
+      <div class="file-meta">${info.ext.toUpperCase()} · ${sizeMB} MB · Click to change</div>
+    </div>
+  `;
+
+  dropzone.onclick = () => fileInput.click();
+
+  transcribeBtnArea.classList.add('visible');
+  statusArea.classList.remove('visible');
+  transcriptSection.classList.remove('visible');
+  setExportEnabled(false);
+  transcriptEl.value = '';
+  updateCharCount();
+}
+
+// ── Transcription ─────────────────────────────────────────────────────────────
+transcribeBtn.addEventListener('click', startTranscription);
+
+async function startTranscription() {
+  if (!currentFilePath) return;
+
+  transcribeBtn.disabled = true;
+  showStatus('loading', 'Running whisper.cpp locally… (first run downloads the model)');
+  transcriptSection.classList.remove('visible');
+  setExportEnabled(false);
+
+  try {
+    const text = await api.transcribe(currentFilePath);
+    transcriptEl.value = text;
+    updateCharCount();
+    showStatus('ok', 'Transcription complete!');
+    transcriptSection.classList.add('visible');
+    setExportEnabled(true);
+  } catch (e) {
+    showStatus('error', e.message || 'Transcription failed.');
+  } finally {
+    transcribeBtn.disabled = false;
+  }
+}
+
+// ── Status ────────────────────────────────────────────────────────────────────
+function showStatus(type, message) {
+  statusArea.classList.add('visible');
+  statusText.textContent = message;
+
+  statusSpinner.style.display = type === 'loading' ? 'block' : 'none';
+  statusIconOk.style.display  = type === 'ok'      ? 'block' : 'none';
+  statusIconErr.style.display = type === 'error'   ? 'block' : 'none';
+}
+
+// ── Export ────────────────────────────────────────────────────────────────────
+function setExportEnabled(enabled) {
+  btnCopy.disabled = !enabled;
+  btnTxt.disabled  = !enabled;
+  btnPdf.disabled  = !enabled;
+}
+
+btnCopy.addEventListener('click', () => {
+  navigator.clipboard.writeText(transcriptEl.value).then(() => showToast('Copied to clipboard'));
+});
+
+btnTxt.addEventListener('click', async () => {
+  const saved = await api.saveTXT({ transcript: transcriptEl.value, filename: currentFileName });
+  if (saved) showToast('Saved as TXT');
+});
+
+btnPdf.addEventListener('click', async () => {
+  const saved = await api.savePDF({ transcript: transcriptEl.value, filename: currentFileName });
+  if (saved) showToast('Saved as PDF');
+});
+
+transcriptEl.addEventListener('input', updateCharCount);
+
+function updateCharCount() {
+  const len = transcriptEl.value.length;
+  charCount.textContent = len > 0 ? `${len.toLocaleString()} chars` : '';
+}
+
+// ── Settings ──────────────────────────────────────────────────────────────────
+async function openSettings() {
+  const settings = await api.getSettings();
+  modelSelect.value = settings.model || 'base';
+  languageSelect.value = settings.language || 'auto';
+  timestampsToggle.checked = !!settings.timestamps;
+  settingsOverlay.classList.add('visible');
+}
+
+function closeSettings() {
+  settingsOverlay.classList.remove('visible');
+}
+
+gearBtn.addEventListener('click', openSettings);
+settingsCancel.addEventListener('click', closeSettings);
+
+settingsOverlay.addEventListener('click', (e) => {
+  if (e.target === settingsOverlay) closeSettings();
+});
+
+settingsSave.addEventListener('click', async () => {
+  await api.setSettings({
+    model: modelSelect.value,
+    language: languageSelect.value,
+    timestamps: timestampsToggle.checked,
+  });
+  closeSettings();
+  showToast('Settings saved');
+});
+
+// ── IPC from main ─────────────────────────────────────────────────────────────
+api.onFileSelected((filePath) => handleFile(filePath));
+api.onOpenSettings(() => openSettings());
+api.onThemeChanged(() => {});
