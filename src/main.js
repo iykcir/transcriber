@@ -157,7 +157,9 @@ ipcMain.handle('transcribe', async (_, filePath) => {
   const language = config.language || 'auto';
   const timestamps = config.timestamps || false;
   const model = config.model || 'base';
-  return transcribeAudio(filePath, language, timestamps, model);
+  return transcribeAudio(filePath, language, timestamps, model, (pct) => {
+    mainWindow?.webContents.send('transcription-progress', pct);
+  });
 });
 
 ipcMain.handle('save-pdf', async (_, { transcript, filename }) => {

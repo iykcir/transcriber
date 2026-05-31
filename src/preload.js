@@ -13,4 +13,5 @@ contextBridge.exposeInMainWorld('api', {
   onFileSelected: (cb) => ipcRenderer.on('file-selected', (_, path) => cb(path)),
   onOpenSettings: (cb) => ipcRenderer.on('open-settings', () => cb()),
   onThemeChanged: (cb) => ipcRenderer.on('theme-changed', (_, theme) => cb(theme)),
+  onTranscriptionProgress: (cb) => ipcRenderer.on('transcription-progress', (_, pct) => cb(pct)),
 });

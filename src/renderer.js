@@ -16,6 +16,9 @@ const transcriptEl      = document.getElementById('transcript');
 const charCount         = document.getElementById('char-count');
 const transcribeBtnArea = document.getElementById('transcribe-btn-area');
 const transcribeBtn     = document.getElementById('transcribe-btn');
+const progressBarWrap   = document.getElementById('progress-bar-wrap');
+const progressFill      = document.getElementById('progress-fill');
+const progressLabel     = document.getElementById('progress-label');
 const btnCopy           = document.getElementById('btn-copy');
 const btnTxt            = document.getElementById('btn-txt');
 const btnPdf            = document.getElementById('btn-pdf');
@@ -108,7 +111,7 @@ async function startTranscription() {
   if (!currentFilePath) return;
 
   transcribeBtn.disabled = true;
-  showStatus('loading', 'Running whisper.cpp locally… (first run downloads the model)');
+  showStatus('loading', 'Loading model…');
   transcriptSection.classList.remove('visible');
   setExportEnabled(false);
 
@@ -131,9 +134,24 @@ function showStatus(type, message) {
   statusArea.classList.add('visible');
   statusText.textContent = message;
 
-  statusSpinner.style.display = type === 'loading' ? 'block' : 'none';
-  statusIconOk.style.display  = type === 'ok'      ? 'block' : 'none';
-  statusIconErr.style.display = type === 'error'   ? 'block' : 'none';
+  const showProgress = type === 'progress';
+  statusSpinner.style.display    = type === 'loading'  ? 'block' : 'none';
+  statusIconOk.style.display     = type === 'ok'       ? 'block' : 'none';
+  statusIconErr.style.display    = type === 'error'    ? 'block' : 'none';
+  if (showProgress) {
+    progressBarWrap.classList.add('visible');
+  } else {
+    progressBarWrap.classList.remove('visible');
+    progressFill.style.width = '0%';
+  }
+}
+
+function setProgress(pct) {
+  progressFill.style.width = `${pct}%`;
+  progressLabel.textContent = `${pct}%`;
+  if (pct > 0 && pct < 100) {
+    showStatus('progress', 'Transcribing with whisper.cpp…');
+  }
 }
 
 // ── Export ────────────────────────────────────────────────────────────────────
@@ -198,3 +216,4 @@ settingsSave.addEventListener('click', async () => {
 api.onFileSelected((filePath) => handleFile(filePath));
 api.onOpenSettings(() => openSettings());
 api.onThemeChanged(() => {});
+api.onTranscriptionProgress((pct) => setProgress(pct));
