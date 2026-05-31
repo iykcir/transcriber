@@ -1,4 +1,6 @@
 const { nodewhisper } = require('nodejs-whisper');
+const { execSync } = require('child_process');
+const fs = require('fs');
 
 const MODELS = {
   tiny:   { label: 'Tiny (75 MB)',    name: 'tiny' },
@@ -6,6 +8,20 @@ const MODELS = {
   small:  { label: 'Small (466 MB)',  name: 'small' },
   medium: { label: 'Medium (1.5 GB)', name: 'medium' },
 };
+
+// Electron replaces process.execPath with its own binary. nodejs-whisper
+// needs the real node binary to run its model-download child process.
+function findNodeBinary() {
+  try {
+    return execSync('which node', { encoding: 'utf8', env: process.env }).trim();
+  } catch {}
+  for (const p of ['/opt/homebrew/bin/node', '/usr/local/bin/node', '/usr/bin/node']) {
+    if (fs.existsSync(p)) return p;
+  }
+  return 'node';
+}
+
+const NODE_PATH = findNodeBinary();
 
 async function transcribeAudio(filePath, language, includeTimestamps, model = 'base') {
   const modelName = MODELS[model] ? MODELS[model].name : 'base';
@@ -15,6 +31,7 @@ async function transcribeAudio(filePath, language, includeTimestamps, model = 'b
     result = await nodewhisper(filePath, {
       modelName,
       autoDownloadModelName: modelName,
+      execPath: NODE_PATH,
       removeWavFileAfterTranscription: true,
       withCuda: false,
       whisperOptions: {
