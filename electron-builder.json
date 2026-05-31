@@ -17,7 +17,8 @@
   },
   "dmg": {
     "title": "Transcriber ${version}",
-    "icon": "assets/icon.icns"
+    "icon": "assets/icon.icns",
+    "format": "ULFO"
   },
   "files": [
     "src/**/*",
