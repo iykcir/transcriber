@@ -2,6 +2,12 @@ const { app, BrowserWindow, ipcMain, dialog, Menu, shell, nativeTheme } = requir
 const path = require('path');
 const fs = require('fs');
 
+// Electron GUI apps launch without the user's shell PATH, so tools installed
+// via Homebrew (cmake, ffmpeg, etc.) are invisible to child processes.
+// Prepend the common Homebrew and system tool paths to fix this.
+const EXTRA_PATHS = ['/opt/homebrew/bin', '/opt/homebrew/sbin', '/usr/local/bin', '/usr/local/sbin'];
+process.env.PATH = [...EXTRA_PATHS, ...(process.env.PATH || '').split(':').filter(Boolean)].join(':');
+
 let mainWindow;
 
 const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');

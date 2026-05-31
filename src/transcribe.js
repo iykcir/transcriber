@@ -44,13 +44,17 @@ async function transcribeAudio(filePath, language, includeTimestamps, model = 'b
       },
     });
   } catch (err) {
-    if (err.message?.includes('ffmpeg')) {
-      throw new Error('ffmpeg is required for audio conversion. Install it with: brew install ffmpeg');
+    const msg = err.message || '';
+    if (msg.includes('ffmpeg')) {
+      throw new Error('ffmpeg is required for audio conversion.\n\nInstall it with:\n  brew install ffmpeg');
     }
-    if (err.message?.includes('model')) {
+    if (msg.includes('cmake') || msg.includes('CMake')) {
+      throw new Error('cmake is required to compile the whisper.cpp engine (one-time setup).\n\nInstall it with:\n  brew install cmake\n\nThen try transcribing again.');
+    }
+    if (msg.includes('model')) {
       throw new Error(`Could not load model "${modelName}". Check your internet connection for the first download.`);
     }
-    throw new Error(`Transcription failed: ${err.message || 'Unknown error'}`);
+    throw new Error(`Transcription failed: ${msg || 'Unknown error'}`);
   }
 
   const text = typeof result === 'string' ? result : (result?.text ?? '');
