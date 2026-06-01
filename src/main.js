@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, dialog, Menu, shell, nativeTheme } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
 // Electron GUI apps launch without the user's shell PATH, so tools installed
 // via Homebrew (cmake, ffmpeg, etc.) are invisible to child processes.
@@ -74,7 +75,7 @@ function buildMenu() {
             const result = await dialog.showOpenDialog(mainWindow, {
               title: 'Open Audio File',
               filters: [
-                { name: 'Audio Files', extensions: ['mp3', 'mp4', 'm4a', 'wav', 'ogg', 'webm', 'flac'] },
+                { name: 'Audio & Video Files', extensions: ['mp3', 'mp4', 'm4a', 'wav', 'ogg', 'webm', 'flac', 'mov', 'mkv', 'avi', 'm4v', 'wmv', '3gp', 'ts'] },
               ],
               properties: ['openFile'],
             });
@@ -220,6 +221,12 @@ ipcMain.handle('save-md', async (_, { transcript, filename }) => {
   if (result.canceled) return null;
   fs.writeFileSync(result.filePath, exportMarkdown(transcript, filename), 'utf8');
   return result.filePath;
+});
+
+ipcMain.handle('save-recording', (_, buffer) => {
+  const tmpPath = path.join(os.tmpdir(), `recording-${Date.now()}.webm`);
+  fs.writeFileSync(tmpPath, Buffer.from(buffer));
+  return tmpPath;
 });
 
 ipcMain.handle('show-in-finder', (_, filePath) => {

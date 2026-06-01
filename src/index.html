@@ -180,6 +180,61 @@
       margin-top: 2px;
     }
 
+    .drop-divider {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      max-width: 180px;
+      color: var(--text-secondary);
+      font-size: 12px;
+    }
+    .drop-divider::before, .drop-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    .btn-record {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 7px 16px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text);
+      cursor: pointer;
+      font-family: inherit;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+      -webkit-app-region: no-drag;
+    }
+    .btn-record svg { color: #ff3b30; flex-shrink: 0; }
+    .btn-record:hover { background: var(--bg); border-color: #ff3b30; color: #ff3b30; }
+
+    /* Recording state (injected into dropzone) */
+    .rec-state { display: flex; align-items: center; gap: 12px; }
+    .rec-dot {
+      width: 14px; height: 14px; border-radius: 50%;
+      background: #ff3b30;
+      animation: rec-pulse 1.2s ease-in-out infinite;
+      flex-shrink: 0;
+    }
+    @keyframes rec-pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50%       { opacity: 0.4; transform: scale(0.75); }
+    }
+    .rec-timer {
+      font-size: 28px; font-weight: 300;
+      color: var(--text); font-variant-numeric: tabular-nums;
+      letter-spacing: 0.03em;
+    }
+    .rec-label { font-size: 13px; color: var(--text-secondary); }
+    .rec-buttons { display: flex; gap: 8px; margin-top: 4px; }
+
     .btn-primary {
       background: var(--accent);
       color: #fff;
@@ -513,9 +568,14 @@
         <line x1="8" y1="23" x2="16" y2="23"/>
       </svg>
       <div class="drop-text">
-        <div class="drop-title">Drop audio file here or click to browse</div>
-        <div class="drop-sub">Supports MP3, MP4, M4A, WAV, OGG, WebM, FLAC</div>
+        <div class="drop-title">Drop an audio or video file, or click to browse</div>
+        <div class="drop-sub">MP3, MP4, M4A, WAV, MOV, MKV, FLAC and more</div>
       </div>
+      <div class="drop-divider"><span>or</span></div>
+      <button class="btn-record" id="record-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+        Record from microphone
+      </button>
     </div>
 
     <!-- Transcribe button -->
@@ -617,7 +677,7 @@
 
 <div id="toast"></div>
 
-<input type="file" id="file-input" accept=".mp3,.mp4,.m4a,.wav,.ogg,.webm,.flac" style="display:none" />
+<input type="file" id="file-input" accept=".mp3,.mp4,.m4a,.wav,.ogg,.webm,.flac,.mov,.mkv,.avi,.m4v,.wmv,.3gp,.ts" style="display:none" />
 
 <script src="renderer.js"></script>
 </body>

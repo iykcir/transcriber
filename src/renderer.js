@@ -43,8 +43,99 @@ function showToast(msg, duration = 2500) {
   toastTimer = setTimeout(() => toast.classList.remove('show'), duration);
 }
 
+// ── Recording ─────────────────────────────────────────────────────────────────
+let mediaRecorder   = null;
+let recordingChunks = [];
+let recordingTimer  = null;
+let recordingSecs   = 0;
+let isRecording     = false;
+
+const DROPZONE_DEFAULT_HTML = dropzone.innerHTML;
+
+function attachRecordBtn() {
+  const btn = document.getElementById('record-btn');
+  if (btn) btn.addEventListener('click', (e) => { e.stopPropagation(); startRecording(); });
+}
+attachRecordBtn();
+
+async function startRecording() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    mediaRecorder    = new MediaRecorder(stream);
+    recordingChunks  = [];
+    recordingSecs    = 0;
+    isRecording      = true;
+
+    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordingChunks.push(e.data); };
+
+    mediaRecorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      isRecording = false;
+      restoreDropzone();
+      const blob     = new Blob(recordingChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+      const buffer   = await blob.arrayBuffer();
+      const filePath = await api.saveRecording(new Uint8Array(buffer));
+      if (filePath) await handleFile(filePath);
+    };
+
+    mediaRecorder.start(250);
+
+    dropzone.innerHTML = `
+      <div class="rec-state">
+        <div class="rec-dot"></div>
+        <span class="rec-timer" id="rec-timer">0:00</span>
+      </div>
+      <div class="rec-label">Recording from microphone…</div>
+      <div class="rec-buttons">
+        <button class="btn-primary" id="stop-record-btn">Stop</button>
+        <button class="btn-secondary" id="cancel-record-btn">Cancel</button>
+      </div>`;
+    dropzone.classList.remove('has-file', 'hover');
+    transcribeBtnArea.classList.remove('visible');
+    statusArea.classList.remove('visible');
+
+    document.getElementById('stop-record-btn').addEventListener('click',   (e) => { e.stopPropagation(); stopRecording();   });
+    document.getElementById('cancel-record-btn').addEventListener('click', (e) => { e.stopPropagation(); cancelRecording(); });
+
+    recordingTimer = setInterval(() => {
+      recordingSecs++;
+      const el = document.getElementById('rec-timer');
+      if (el) el.textContent = `${Math.floor(recordingSecs / 60)}:${String(recordingSecs % 60).padStart(2, '0')}`;
+    }, 1000);
+
+  } catch (e) {
+    isRecording = false;
+    showStatus('error', e.name === 'NotAllowedError'
+      ? 'Microphone access denied. Check System Settings → Privacy & Security → Microphone.'
+      : `Could not access microphone: ${e.message}`);
+  }
+}
+
+function stopRecording() {
+  clearInterval(recordingTimer);
+  if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
+}
+
+function cancelRecording() {
+  clearInterval(recordingTimer);
+  isRecording = false;
+  if (mediaRecorder && mediaRecorder.state === 'recording') {
+    mediaRecorder.onstop = () => {};
+    mediaRecorder.stream?.getTracks().forEach(t => t.stop());
+    mediaRecorder.stop();
+  }
+  restoreDropzone();
+}
+
+function restoreDropzone() {
+  dropzone.innerHTML = DROPZONE_DEFAULT_HTML;
+  dropzone.classList.remove('has-file', 'hover');
+  dropzone.onclick = null;
+  attachRecordBtn();
+}
+
 // ── Drop Zone ─────────────────────────────────────────────────────────────────
-dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('click', () => { if (!isRecording) fileInput.click(); });
 
 dropzone.addEventListener('dragover', (e) => {
   e.preventDefault();
