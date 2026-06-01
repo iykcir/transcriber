@@ -1,5 +1,6 @@
 const { spawn, execFile } = require('child_process');
 const fs = require('fs');
+const https = require('https');
 const path = require('path');
 const os = require('os');
 const { app } = require('electron');
@@ -14,9 +15,61 @@ function getWhisperCppPath() {
   return path.join(__dirname, '..', 'node_modules', 'nodejs-whisper', 'cpp', 'whisper.cpp');
 }
 
-const WHISPER_CPP_PATH = getWhisperCppPath();
-const WHISPER_CLI = path.join(WHISPER_CPP_PATH, 'build', 'bin', 'whisper-cli');
-const MODELS_DIR = path.join(WHISPER_CPP_PATH, 'models');
+// Store models in userData so they survive app reinstalls.
+function getModelsDir() {
+  if (app.isPackaged) {
+    return path.join(app.getPath('userData'), 'models');
+  }
+  return path.join(getWhisperCppPath(), 'models');
+}
+
+const WHISPER_CLI = path.join(getWhisperCppPath(), 'build', 'bin', 'whisper-cli');
+
+const MODEL_BASE_URL = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main';
+
+function downloadModel(modelFile, destDir, onProgress) {
+  return new Promise((resolve, reject) => {
+    fs.mkdirSync(destDir, { recursive: true });
+    const destPath = path.join(destDir, modelFile);
+    const tmpPath = destPath + '.download';
+
+    function fetch(urlStr) {
+      https.get(urlStr, (res) => {
+        if (res.statusCode === 301 || res.statusCode === 302) {
+          res.resume();
+          return fetch(res.headers.location);
+        }
+        if (res.statusCode !== 200) {
+          res.resume();
+          return reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+        }
+        const total = parseInt(res.headers['content-length'] || '0', 10);
+        let received = 0;
+        const file = fs.createWriteStream(tmpPath);
+        res.on('data', (chunk) => {
+          received += chunk.length;
+          if (total > 0) onProgress(Math.round((received / total) * 100));
+        });
+        res.pipe(file);
+        file.on('finish', () => {
+          file.close(() => {
+            fs.renameSync(tmpPath, destPath);
+            resolve(destPath);
+          });
+        });
+        file.on('error', (err) => {
+          fs.unlink(tmpPath, () => {});
+          reject(err);
+        });
+      }).on('error', (err) => {
+        fs.unlink(tmpPath, () => {});
+        reject(err);
+      });
+    }
+
+    fetch(`${MODEL_BASE_URL}/${modelFile}`);
+  });
+}
 
 const MODEL_FILES = {
   tiny:   'ggml-tiny.bin',
@@ -121,22 +174,21 @@ function runWhisper(wavPath, modelPath, language, includeTimestamps, onProgress)
   });
 }
 
-async function transcribeAudio(filePath, language, includeTimestamps, model = 'base', onProgress = () => {}) {
+async function transcribeAudio(filePath, language, includeTimestamps, model = 'base', onProgress = () => {}, onDownload = () => {}) {
+  const modelsDir = getModelsDir();
   const modelFile = MODEL_FILES[model] || MODEL_FILES.base;
-  const modelPath = path.join(MODELS_DIR, modelFile);
+  const modelPath = path.join(modelsDir, modelFile);
 
   if (!fs.existsSync(WHISPER_CLI)) {
     throw new Error(
       'whisper-cli binary not found. Build it first:\n\n' +
-      `cd "${WHISPER_CPP_PATH}" && cmake -B build && cmake --build build --config Release`
+      `cd "${getWhisperCppPath()}" && cmake -B build && cmake --build build --config Release`
     );
   }
 
   if (!fs.existsSync(modelPath)) {
-    throw new Error(
-      `Model file not found: ${modelFile}\n\n` +
-      'Run a transcription once to auto-download it, or download manually.'
-    );
+    onDownload(0);
+    await downloadModel(modelFile, modelsDir, onDownload);
   }
 
   onProgress(0);

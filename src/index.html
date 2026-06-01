@@ -304,6 +304,8 @@
     }
 
     #toolbar .spacer { flex: 1; }
+    .export-group { display: flex; align-items: center; gap: 6px; }
+    .export-label { font-size: 12px; color: var(--text-secondary); margin-right: 2px; }
 
     /* Settings modal */
     #settings-overlay {
@@ -512,7 +514,7 @@
       </svg>
       <div class="drop-text">
         <div class="drop-title">Drop audio file here or click to browse</div>
-        <div class="drop-sub">Supports MP3, MP4, M4A, WAV, OGG, WebM, FLAC · Max 25 MB</div>
+        <div class="drop-sub">Supports MP3, MP4, M4A, WAV, OGG, WebM, FLAC</div>
       </div>
     </div>
 
@@ -548,8 +550,14 @@
   <div id="toolbar">
     <button class="btn-secondary" id="btn-copy" disabled>Copy</button>
     <div class="spacer"></div>
-    <button class="btn-secondary" id="btn-txt" disabled>Save as TXT</button>
-    <button class="btn-primary" id="btn-pdf" disabled>Save as PDF</button>
+    <div class="export-group">
+      <span class="export-label">Save as</span>
+      <button class="btn-secondary" id="btn-txt"  disabled title="Plain text">TXT</button>
+      <button class="btn-secondary" id="btn-md"   disabled title="Markdown">MD</button>
+      <button class="btn-secondary" id="btn-docx" disabled title="Word document">DOCX</button>
+      <button class="btn-secondary" id="btn-srt"  disabled title="SubRip subtitles">SRT</button>
+      <button class="btn-secondary" id="btn-pdf"  disabled title="PDF document">PDF</button>
+    </div>
   </div>
 </div>
 

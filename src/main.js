@@ -157,9 +157,10 @@ ipcMain.handle('transcribe', async (_, filePath) => {
   const language = config.language || 'auto';
   const timestamps = config.timestamps || false;
   const model = config.model || 'base';
-  return transcribeAudio(filePath, language, timestamps, model, (pct) => {
-    mainWindow?.webContents.send('transcription-progress', pct);
-  });
+  return transcribeAudio(filePath, language, timestamps, model,
+    (pct) => mainWindow?.webContents.send('transcription-progress', pct),
+    (pct) => mainWindow?.webContents.send('model-download-progress', pct),
+  );
 });
 
 ipcMain.handle('save-pdf', async (_, { transcript, filename }) => {
@@ -182,6 +183,42 @@ ipcMain.handle('save-txt', async (_, { transcript, filename }) => {
   });
   if (result.canceled) return null;
   fs.writeFileSync(result.filePath, transcript, 'utf8');
+  return result.filePath;
+});
+
+ipcMain.handle('save-docx', async (_, { transcript, filename }) => {
+  const { exportDOCX } = require('./export');
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Save Transcript as Word Document',
+    defaultPath: `${filename}.docx`,
+    filters: [{ name: 'Word Document', extensions: ['docx'] }],
+  });
+  if (result.canceled) return null;
+  await exportDOCX(transcript, filename, result.filePath);
+  return result.filePath;
+});
+
+ipcMain.handle('save-srt', async (_, { transcript, filename }) => {
+  const { exportSRT } = require('./export');
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Save Transcript as Subtitles',
+    defaultPath: `${filename}.srt`,
+    filters: [{ name: 'SubRip Subtitle', extensions: ['srt'] }],
+  });
+  if (result.canceled) return null;
+  fs.writeFileSync(result.filePath, exportSRT(transcript), 'utf8');
+  return result.filePath;
+});
+
+ipcMain.handle('save-md', async (_, { transcript, filename }) => {
+  const { exportMarkdown } = require('./export');
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Save Transcript as Markdown',
+    defaultPath: `${filename}.md`,
+    filters: [{ name: 'Markdown', extensions: ['md'] }],
+  });
+  if (result.canceled) return null;
+  fs.writeFileSync(result.filePath, exportMarkdown(transcript, filename), 'utf8');
   return result.filePath;
 });
 

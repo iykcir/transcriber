@@ -76,4 +76,68 @@ async function exportPDF(transcript, title, outputPath) {
   });
 }
 
-module.exports = { exportPDF };
+async function exportDOCX(transcript, title, outputPath) {
+  const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } = require('docx');
+
+  const dateStr = new Date().toLocaleDateString('en-US', {
+    year: 'numeric', month: 'long', day: 'numeric',
+  });
+
+  const bodyParagraphs = transcript.split('\n').map(line =>
+    new Paragraph({
+      children: [new TextRun({ text: line, size: 24, font: 'Times New Roman' })],
+      spacing: { after: 120 },
+    })
+  );
+
+  const doc = new Document({
+    sections: [{
+      children: [
+        new Paragraph({
+          heading: HeadingLevel.HEADING_1,
+          children: [new TextRun({ text: title, bold: true, size: 48, font: 'Times New Roman' })],
+          spacing: { after: 80 },
+        }),
+        new Paragraph({
+          children: [new TextRun({ text: `Transcribed on ${dateStr}`, color: '666666', size: 20, italics: true, font: 'Times New Roman' })],
+          spacing: { after: 240 },
+        }),
+        ...bodyParagraphs,
+      ],
+    }],
+  });
+
+  const buffer = await Packer.toBuffer(doc);
+  fs.writeFileSync(outputPath, buffer);
+}
+
+function exportSRT(transcript) {
+  const lines = transcript.split('\n').filter(Boolean);
+  // Detect timestamp format: [HH:MM:SS.mmm --> HH:MM:SS.mmm]
+  const tsPattern = /^\[(\d{2}:\d{2}:\d{2}\.\d{3}) --> (\d{2}:\d{2}:\d{2}\.\d{3})\]\s*(.*)/;
+  const hasTimestamps = lines.some(l => tsPattern.test(l));
+
+  if (!hasTimestamps) {
+    // Produce a single-segment SRT covering the whole file
+    return `1\n00:00:00,000 --> 00:00:00,001\n${transcript.trim()}\n`;
+  }
+
+  return lines
+    .map(line => tsPattern.exec(line))
+    .filter(Boolean)
+    .map(([, start, end, text], i) => {
+      const srtStart = start.replace('.', ',');
+      const srtEnd   = end.replace('.', ',');
+      return `${i + 1}\n${srtStart} --> ${srtEnd}\n${text.trim()}`;
+    })
+    .join('\n\n') + '\n';
+}
+
+function exportMarkdown(transcript, title) {
+  const dateStr = new Date().toLocaleDateString('en-US', {
+    year: 'numeric', month: 'long', day: 'numeric',
+  });
+  return `# ${title}\n\n*Transcribed on ${dateStr}*\n\n---\n\n${transcript.trim()}\n`;
+}
+
+module.exports = { exportPDF, exportDOCX, exportSRT, exportMarkdown };

@@ -21,6 +21,9 @@ const progressFill      = document.getElementById('progress-fill');
 const progressLabel     = document.getElementById('progress-label');
 const btnCopy           = document.getElementById('btn-copy');
 const btnTxt            = document.getElementById('btn-txt');
+const btnMd             = document.getElementById('btn-md');
+const btnDocx           = document.getElementById('btn-docx');
+const btnSrt            = document.getElementById('btn-srt');
 const btnPdf            = document.getElementById('btn-pdf');
 const settingsOverlay   = document.getElementById('settings-overlay');
 const modelSelect       = document.getElementById('model-select');
@@ -72,10 +75,6 @@ async function handleFile(filePath) {
   }
 
   const sizeMB = (info.size / 1024 / 1024).toFixed(1);
-  if (info.size > 500 * 1024 * 1024) {
-    showStatus('error', 'File exceeds 500 MB limit.');
-    return;
-  }
 
   currentFilePath = filePath;
   currentFileName = info.name.replace(/\.[^.]+$/, '');
@@ -150,7 +149,8 @@ function setProgress(pct) {
   progressFill.style.width = `${pct}%`;
   progressLabel.textContent = `${pct}%`;
   if (pct > 0 && pct < 100) {
-    showStatus('progress', 'Transcribing with whisper.cpp…');
+    const label = pct < 5 ? 'Preparing audio…' : 'Transcribing with whisper.cpp…';
+    showStatus('progress', label);
   }
 }
 
@@ -158,6 +158,9 @@ function setProgress(pct) {
 function setExportEnabled(enabled) {
   btnCopy.disabled = !enabled;
   btnTxt.disabled  = !enabled;
+  btnMd.disabled   = !enabled;
+  btnDocx.disabled = !enabled;
+  btnSrt.disabled  = !enabled;
   btnPdf.disabled  = !enabled;
 }
 
@@ -168,6 +171,21 @@ btnCopy.addEventListener('click', () => {
 btnTxt.addEventListener('click', async () => {
   const saved = await api.saveTXT({ transcript: transcriptEl.value, filename: currentFileName });
   if (saved) showToast('Saved as TXT');
+});
+
+btnMd.addEventListener('click', async () => {
+  const saved = await api.saveMD({ transcript: transcriptEl.value, filename: currentFileName });
+  if (saved) showToast('Saved as Markdown');
+});
+
+btnDocx.addEventListener('click', async () => {
+  const saved = await api.saveDOCX({ transcript: transcriptEl.value, filename: currentFileName });
+  if (saved) showToast('Saved as DOCX');
+});
+
+btnSrt.addEventListener('click', async () => {
+  const saved = await api.saveSRT({ transcript: transcriptEl.value, filename: currentFileName });
+  if (saved) showToast('Saved as SRT');
 });
 
 btnPdf.addEventListener('click', async () => {
@@ -217,3 +235,8 @@ api.onFileSelected((filePath) => handleFile(filePath));
 api.onOpenSettings(() => openSettings());
 api.onThemeChanged(() => {});
 api.onTranscriptionProgress((pct) => setProgress(pct));
+api.onModelDownloadProgress((pct) => {
+  showStatus('progress', 'Downloading model…');
+  progressFill.style.width = `${pct}%`;
+  progressLabel.textContent = `${pct}%`;
+});

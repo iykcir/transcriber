@@ -5,8 +5,9 @@
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder",
-    "pack": "electron-builder --dir"
+    "build:whisper": "cd node_modules/nodejs-whisper/cpp/whisper.cpp && /opt/homebrew/bin/cmake -B build && /opt/homebrew/bin/cmake --build build --config Release",
+    "build": "npm run build:whisper && electron-builder",
+    "pack": "npm run build:whisper && electron-builder --dir"
   },
   "build": {
     "appId": "com.transcriber.app",
@@ -37,14 +38,15 @@
     "nativeRebuilder": "sequential"
   },
   "dependencies": {
+    "docx": "^9.7.1",
     "nodejs-whisper": "^0.3.0",
     "pdfkit": "^0.15.0"
   },
   "devDependencies": {
     "canvas": "^3.2.3",
-    "electron": "^33.0.0",
+    "electron": "^42.3.0",
     "electron-builder": "^26.8.1",
-    "electron-rebuild": "^3.2.9",
+    "electron-rebuild": "^1.4.0",
     "playwright-core": "^1.60.0"
   }
 }
