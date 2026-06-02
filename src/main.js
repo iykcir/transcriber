@@ -142,9 +142,10 @@ function showAbout() {
 ipcMain.handle('get-settings', () => {
   const config = readConfig();
   return {
-    language: config.language || 'auto',
+    language:  config.language  || 'auto',
     timestamps: config.timestamps || false,
-    model: config.model || 'base',
+    model:     config.model     || 'base',
+    translate: config.translate  || false,
   };
 });
 
@@ -155,10 +156,11 @@ ipcMain.handle('set-settings', (_, settings) => {
 ipcMain.handle('transcribe', async (_, filePath) => {
   const { transcribeAudio } = require('./transcribe');
   const config = readConfig();
-  const language = config.language || 'auto';
+  const language  = config.language  || 'auto';
   const timestamps = config.timestamps || false;
-  const model = config.model || 'base';
-  return transcribeAudio(filePath, language, timestamps, model,
+  const model     = config.model     || 'base';
+  const translate = config.translate  || false;
+  return transcribeAudio(filePath, language, timestamps, model, translate,
     (pct) => mainWindow?.webContents.send('transcription-progress', pct),
     (pct) => mainWindow?.webContents.send('model-download-progress', pct),
   );

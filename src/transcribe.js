@@ -106,7 +106,7 @@ function convertToWav(inputPath) {
 
 // Run whisper-cli, streaming stderr for progress events.
 // onProgress(0..100) is called as inference proceeds.
-function runWhisper(wavPath, modelPath, language, includeTimestamps, onProgress) {
+function runWhisper(wavPath, modelPath, language, includeTimestamps, translate, onProgress) {
   return new Promise((resolve, reject) => {
     const args = [
       '-m', modelPath,
@@ -114,6 +114,7 @@ function runWhisper(wavPath, modelPath, language, includeTimestamps, onProgress)
       '-pp',                         // print-progress → emits "progress = N%" on stderr
       '--no-prints',                 // suppress most log noise
       '-l', (!language || language === 'auto') ? 'auto' : language,
+      ...(translate ? ['--translate'] : []),
     ];
 
     if (includeTimestamps) {
@@ -174,7 +175,7 @@ function runWhisper(wavPath, modelPath, language, includeTimestamps, onProgress)
   });
 }
 
-async function transcribeAudio(filePath, language, includeTimestamps, model = 'base', onProgress = () => {}, onDownload = () => {}) {
+async function transcribeAudio(filePath, language, includeTimestamps, model = 'base', translate = false, onProgress = () => {}, onDownload = () => {}) {
   const modelsDir = getModelsDir();
   const modelFile = MODEL_FILES[model] || MODEL_FILES.base;
   const modelPath = path.join(modelsDir, modelFile);
@@ -207,7 +208,7 @@ async function transcribeAudio(filePath, language, includeTimestamps, model = 'b
 
     onProgress(5);
 
-    const transcript = await runWhisper(wavPath, modelPath, language, includeTimestamps, (pct) => {
+    const transcript = await runWhisper(wavPath, modelPath, language, includeTimestamps, translate, (pct) => {
       // Map whisper's 0-100 into 5-99 so the bar visibly fills but doesn't
       // prematurely hit 100 before we've processed the result.
       onProgress(5 + Math.round(pct * 0.94));

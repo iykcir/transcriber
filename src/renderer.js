@@ -29,6 +29,7 @@ const settingsOverlay   = document.getElementById('settings-overlay');
 const modelSelect       = document.getElementById('model-select');
 const languageSelect    = document.getElementById('language-select');
 const timestampsToggle  = document.getElementById('timestamps-toggle');
+const translateToggle   = document.getElementById('translate-toggle');
 const settingsSave      = document.getElementById('settings-save');
 const settingsCancel    = document.getElementById('settings-cancel');
 const gearBtn           = document.getElementById('gear-btn');
@@ -297,6 +298,7 @@ async function openSettings() {
   modelSelect.value = settings.model || 'base';
   languageSelect.value = settings.language || 'auto';
   timestampsToggle.checked = !!settings.timestamps;
+  translateToggle.checked  = !!settings.translate;
   settingsOverlay.classList.add('visible');
 }
 
@@ -313,9 +315,10 @@ settingsOverlay.addEventListener('click', (e) => {
 
 settingsSave.addEventListener('click', async () => {
   await api.setSettings({
-    model: modelSelect.value,
-    language: languageSelect.value,
+    model:      modelSelect.value,
+    language:   languageSelect.value,
     timestamps: timestampsToggle.checked,
+    translate:  translateToggle.checked,
   });
   closeSettings();
   showToast('Settings saved');
