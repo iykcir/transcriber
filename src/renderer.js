@@ -183,9 +183,14 @@ async function handleFile(filePath) {
       <div class="file-name">${info.name}</div>
       <div class="file-meta">${info.ext.toUpperCase()} · ${sizeMB} MB · Click to change</div>
     </div>
+    <button class="btn-record" id="record-btn" title="Record from microphone">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+      Record
+    </button>
   `;
 
   dropzone.onclick = () => fileInput.click();
+  attachRecordBtn();
 
   transcribeBtnArea.classList.add('visible');
   statusArea.classList.remove('visible');
