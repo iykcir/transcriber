@@ -1,65 +1,86 @@
 # Transcriber
 
-A native-feeling macOS desktop application that accepts audio files as input and outputs clean, readable transcription documents powered by OpenAI Whisper.
+A native-feeling macOS desktop app for offline audio and video transcription, powered by [whisper.cpp](https://github.com/ggerganov/whisper.cpp). No API key, no internet required — everything runs on-device.
 
 ## Features
 
-- Drag-and-drop or browse for audio files (MP3, MP4, M4A, WAV, OGG, WebM, FLAC)
-- Transcription via OpenAI Whisper API (whisper-1 model)
-- Optional timestamps in output
-- Export to PDF (paginated, serif font) or plain TXT
+### Input
+| Method | Details |
+|---|---|
+| Drag & drop or browse | Drop a file onto the window or use File → Open |
+| Record from microphone | Click **Record from microphone** to capture live audio |
+| Capture system audio | Click **Capture system audio** to record whatever is playing on your Mac |
+| URL | Paste a direct link to audio or video and click **Load**; YouTube links work with `yt-dlp` installed |
+
+### Supported formats
+Audio: MP3, M4A, WAV, OGG, WebM, FLAC  
+Video: MP4, MOV, MKV, AVI, M4V, WMV, 3GP, TS — audio is extracted automatically
+
+### File size
+No limit. Files of any size are accepted; ffmpeg converts them to the 16 kHz mono WAV format whisper requires before transcription.
+
+### Models
+Downloaded automatically on first use and cached in `~/Library/Application Support/Transcriber/models/`.
+
+| Model | Size | Speed |
+|---|---|---|
+| Tiny | 75 MB | Fastest |
+| Base | 142 MB | Recommended |
+| Small | 466 MB | More accurate |
+| Medium | 1.5 GB | Best quality |
+
+### Transcription options
+- **Language** — auto-detect or choose from 14 languages (English, Spanish, French, German, Italian, Portuguese, Dutch, Polish, Russian, Chinese, Japanese, Korean, Arabic, Hindi)
+- **Timestamps** — include `[HH:MM:SS → HH:MM:SS]` segment markers in the output
+- **Translate to English** — transcribes audio in any language and outputs English text
+
+### Export
+TXT · Markdown · DOCX (Word) · SRT (subtitles) · PDF
+
+### Other
+- Progress bar during model download and transcription
 - Copy transcript to clipboard
-- API key stored securely in macOS Keychain
-- Light/dark mode support
+- Light/dark mode (follows system)
 
 ## Requirements
 
 - macOS 11+
 - Node.js 18+
-- An [OpenAI API key](https://platform.openai.com/api-keys)
+- [ffmpeg](https://ffmpeg.org/) — `brew install ffmpeg`
+- [cmake](https://cmake.org/) — `brew install cmake` (needed to build whisper-cli)
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) *(optional)* — `brew install yt-dlp` (needed for YouTube URLs)
 
-## Setup
+## Development
 
 ```bash
-# 1. Install dependencies
+# Install dependencies
 npm install
 
-# 2. Start in development mode
+# Start in development mode
 npm start
-
-# 3. Add your OpenAI API key via Settings (⌘,) or the gear icon
 ```
 
-## Build a distributable DMG
+## Build
 
 ```bash
 npm run build
-# Output: ./dist/Transcriber-*.dmg
-```
-
-## Generate app icon (optional, requires `canvas` package)
-
-```bash
-npm install canvas
-node generate-icon.js
+# Compiles whisper-cli then packages the app
+# Output: dist/Transcriber-<version>-arm64.dmg  (Apple Silicon)
+#         dist/Transcriber-<version>.dmg          (Intel)
 ```
 
 ## Usage
 
-1. Launch the app with `npm start`
-2. Open **Settings** (⌘, or gear icon) and paste your OpenAI API key
-3. Drag an audio file onto the drop zone, or click **File > Open Audio**
-4. Click **Transcribe** and wait for the result
-5. Edit the transcript if needed, then export via **Save as PDF**, **Save as TXT**, or **Copy**
-
-## File size limits
-
-The OpenAI Whisper API accepts files up to **25 MB**. For larger files, compress the audio first (e.g., `ffmpeg -i input.wav -b:a 64k output.mp3`).
+1. Launch the app (`npm start` or install from DMG)
+2. Choose an input — drop a file, record, capture system audio, or paste a URL
+3. Open **Settings** (⌘,) to choose a model, language, and other options
+4. Click **Transcribe**
+5. Edit the transcript if needed, then export or copy
 
 ## Keyboard shortcuts
 
 | Action | Shortcut |
 |---|---|
-| Open audio file | ⌘O |
+| Open audio/video file | ⌘O |
 | Settings | ⌘, |
 | Quit | ⌘Q |
