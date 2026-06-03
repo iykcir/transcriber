@@ -92,32 +92,30 @@ function convertToWav(inputPath) {
   const outPath = path.join(os.tmpdir(), `whisper-${Date.now()}.wav`);
 
   if (YOUTUBE_RE.test(inputPath)) {
-    // YouTube: use yt-dlp to extract audio, then ffmpeg to normalise to 16 kHz mono WAV
-    const rawPath = outPath.replace('.wav', '-raw.%(ext)s');
+    // YouTube: stream audio via ytdl-core and pipe directly into ffmpeg
+    const ytdl = require('@distube/ytdl-core');
     return new Promise((resolve, reject) => {
-      execFile('yt-dlp',
-        ['-x', '--audio-format', 'best', '-o', rawPath, '--no-playlist', inputPath],
-        { env: process.env },
-        (err) => {
-          if (err) return reject(new Error('Could not download YouTube audio. Install yt-dlp: brew install yt-dlp'));
-          // Find the downloaded file (extension varies)
-          const base = rawPath.replace('.%(ext)s', '');
-          const found = require('fs').readdirSync(os.tmpdir())
-            .map(f => path.join(os.tmpdir(), f))
-            .find(f => f.startsWith(base) && !f.endsWith('.wav'));
-          if (!found) return reject(new Error('yt-dlp download succeeded but output file not found.'));
-          execFile('ffmpeg',
-            ['-nostats', '-loglevel', 'error', '-y', '-i', found,
-             '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', outPath],
-            { env: process.env },
-            (err2) => {
-              fs.unlink(found, () => {});
-              if (err2) reject(new Error('ffmpeg conversion failed after yt-dlp download.'));
-              else resolve(outPath);
-            }
-          );
-        }
+      let ytStream;
+      try {
+        ytStream = ytdl(inputPath, { quality: 'highestaudio', filter: 'audioonly' });
+      } catch (e) {
+        return reject(new Error(`Could not load YouTube URL: ${e.message}`));
+      }
+
+      const ffmpeg = spawn('ffmpeg',
+        ['-nostats', '-loglevel', 'error', '-y', '-i', 'pipe:0',
+         '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', outPath],
+        { env: process.env }
       );
+
+      ytStream.on('error', (e) => { ffmpeg.kill(); reject(new Error(`YouTube download failed: ${e.message}`)); });
+      ffmpeg.on('error', (e) => reject(new Error(`ffmpeg error: ${e.message}`)));
+      ffmpeg.on('close', (code) => {
+        if (code === 0) resolve(outPath);
+        else reject(new Error('ffmpeg conversion failed during YouTube download.'));
+      });
+
+      ytStream.pipe(ffmpeg.stdin);
     });
   }
 
