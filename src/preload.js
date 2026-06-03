@@ -3,7 +3,7 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('api', {
   getSettings: () => ipcRenderer.invoke('get-settings'),
   setSettings: (settings) => ipcRenderer.invoke('set-settings', settings),
-  transcribe: (filePath) => ipcRenderer.invoke('transcribe', filePath),
+  transcribe: (filePath, translate) => ipcRenderer.invoke('transcribe', filePath, translate),
   savePDF:  (data) => ipcRenderer.invoke('save-pdf',  data),
   saveTXT:  (data) => ipcRenderer.invoke('save-txt',  data),
   saveDOCX: (data) => ipcRenderer.invoke('save-docx', data),

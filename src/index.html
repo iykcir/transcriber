@@ -358,6 +358,17 @@
       text-transform: uppercase;
       letter-spacing: 0.06em;
       margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    #transcript-label .label-spacer { flex: 1; }
+    #btn-translate {
+      text-transform: none;
+      letter-spacing: normal;
+      font-size: 12px;
+      padding: 3px 10px;
+      border-radius: 6px;
     }
 
     #transcript {
@@ -652,7 +663,11 @@
 
     <!-- Transcript -->
     <div id="transcript-section">
-      <div id="transcript-label">Transcript <span id="char-count" class="char-count"></span></div>
+      <div id="transcript-label">
+        Transcript <span id="char-count" class="char-count"></span>
+        <span class="label-spacer"></span>
+        <button class="btn-secondary" id="btn-translate" style="display:none">Translate to English</button>
+      </div>
       <textarea id="transcript" spellcheck="true" placeholder="Your transcript will appear here…"></textarea>
     </div>
   </div>

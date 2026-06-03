@@ -153,13 +153,13 @@ ipcMain.handle('set-settings', (_, settings) => {
   writeConfig(settings);
 });
 
-ipcMain.handle('transcribe', async (_, filePath) => {
+ipcMain.handle('transcribe', async (_, filePath, translateOverride) => {
   const { transcribeAudio } = require('./transcribe');
   const config = readConfig();
   const language  = config.language  || 'auto';
   const timestamps = config.timestamps || false;
   const model     = config.model     || 'base';
-  const translate = config.translate  || false;
+  const translate = translateOverride !== undefined ? translateOverride : (config.translate || false);
   return transcribeAudio(filePath, language, timestamps, model, translate,
     (pct) => mainWindow?.webContents.send('transcription-progress', pct),
     (pct) => mainWindow?.webContents.send('model-download-progress', pct),

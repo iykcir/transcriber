@@ -20,6 +20,7 @@ const progressBarWrap   = document.getElementById('progress-bar-wrap');
 const progressFill      = document.getElementById('progress-fill');
 const progressLabel     = document.getElementById('progress-label');
 const btnCopy           = document.getElementById('btn-copy');
+const btnTranslate      = document.getElementById('btn-translate');
 const btnTxt            = document.getElementById('btn-txt');
 const btnMd             = document.getElementById('btn-md');
 const btnDocx           = document.getElementById('btn-docx');
@@ -188,6 +189,7 @@ async function loadUrl(url) {
   statusArea.classList.remove('visible');
   transcriptSection.classList.remove('visible');
   setExportEnabled(false);
+  btnTranslate.style.display = 'none';
   transcriptEl.value = '';
   updateCharCount();
 }
@@ -248,28 +250,32 @@ async function handleFile(filePath) {
   statusArea.classList.remove('visible');
   transcriptSection.classList.remove('visible');
   setExportEnabled(false);
+  btnTranslate.style.display = 'none';
   transcriptEl.value = '';
   updateCharCount();
 }
 
 // ── Transcription ─────────────────────────────────────────────────────────────
-transcribeBtn.addEventListener('click', startTranscription);
+transcribeBtn.addEventListener('click', () => startTranscription(false));
+btnTranslate.addEventListener('click', () => startTranscription(true));
 
-async function startTranscription() {
+async function startTranscription(translateOverride) {
   if (!currentFilePath) return;
 
   transcribeBtn.disabled = true;
+  btnTranslate.style.display = 'none';
   showStatus('loading', 'Loading model…');
   transcriptSection.classList.remove('visible');
   setExportEnabled(false);
 
   try {
-    const text = await api.transcribe(currentFilePath);
+    const text = await api.transcribe(currentFilePath, translateOverride || undefined);
     transcriptEl.value = text;
     updateCharCount();
-    showStatus('ok', 'Transcription complete!');
+    showStatus('ok', translateOverride ? 'Translation complete!' : 'Transcription complete!');
     transcriptSection.classList.add('visible');
     setExportEnabled(true);
+    if (!translateOverride) btnTranslate.style.display = '';
   } catch (e) {
     showStatus('error', e.message || 'Transcription failed.');
   } finally {
@@ -298,7 +304,13 @@ function setProgress(pct) {
   progressFill.style.width = `${pct}%`;
   progressLabel.textContent = `${pct}%`;
   if (pct > 0 && pct < 100) {
-    const label = pct < 5 ? 'Preparing audio…' : 'Transcribing with whisper.cpp…';
+    let label;
+    if (pct < 5) {
+      const isStream = /^https?:\/\//i.test(currentFilePath || '');
+      label = isStream ? `Fetching "${currentFileName}"…` : 'Preparing audio…';
+    } else {
+      label = `Transcribing "${currentFileName}"…`;
+    }
     showStatus('progress', label);
   }
 }
