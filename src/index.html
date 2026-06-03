@@ -180,20 +180,57 @@
       margin-top: 2px;
     }
 
-    .drop-divider {
+    #input-options {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      margin-top: -4px;
+    }
+    #input-options.hidden { display: none; }
+
+    .input-divider {
       display: flex;
       align-items: center;
       gap: 8px;
       width: 100%;
-      max-width: 180px;
       color: var(--text-secondary);
       font-size: 12px;
     }
-    .drop-divider::before, .drop-divider::after {
+    .input-divider::before, .input-divider::after {
       content: '';
       flex: 1;
       height: 1px;
       background: var(--border);
+    }
+
+    .input-buttons {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .url-row {
+      display: flex;
+      gap: 8px;
+      width: 100%;
+    }
+    .url-row input {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 13px;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s;
+    }
+    .url-row input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(0,122,255,0.15);
     }
 
     .btn-record {
@@ -571,11 +608,25 @@
         <div class="drop-title">Drop an audio or video file, or click to browse</div>
         <div class="drop-sub">MP3, MP4, M4A, WAV, MOV, MKV, FLAC and more</div>
       </div>
-      <div class="drop-divider"><span>or</span></div>
-      <button class="btn-record" id="record-btn">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
-        Record from microphone
-      </button>
+    </div>
+
+    <!-- Permanent input options — never replaced by handleFile -->
+    <div id="input-options">
+      <div class="input-divider"><span>or</span></div>
+      <div class="input-buttons">
+        <button class="btn-record" id="record-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
+          Record from microphone
+        </button>
+        <button class="btn-record" id="system-audio-btn">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><polyline points="8 21 12 17 16 21"/></svg>
+          Capture system audio
+        </button>
+      </div>
+      <div class="url-row">
+        <input type="url" id="url-input" placeholder="Paste a link to audio or video…" />
+        <button class="btn-secondary" id="url-load-btn">Load</button>
+      </div>
     </div>
 
     <!-- Transcribe button -->

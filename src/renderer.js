@@ -44,72 +44,94 @@ function showToast(msg, duration = 2500) {
   toastTimer = setTimeout(() => toast.classList.remove('show'), duration);
 }
 
-// ── Recording ─────────────────────────────────────────────────────────────────
+// ── Recording & Capture ───────────────────────────────────────────────────────
 let mediaRecorder   = null;
+let activeStream    = null;
 let recordingChunks = [];
 let recordingTimer  = null;
 let recordingSecs   = 0;
 let isRecording     = false;
 
 const DROPZONE_DEFAULT_HTML = dropzone.innerHTML;
+const inputOptions  = document.getElementById('input-options');
+const urlInput      = document.getElementById('url-input');
+const urlLoadBtn    = document.getElementById('url-load-btn');
 
-function attachRecordBtn() {
-  const btn = document.getElementById('record-btn');
-  if (btn) btn.addEventListener('click', (e) => { e.stopPropagation(); startRecording(); });
-}
-attachRecordBtn();
-
-async function startRecording() {
+document.getElementById('record-btn').addEventListener('click', async () => {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    mediaRecorder    = new MediaRecorder(stream);
-    recordingChunks  = [];
-    recordingSecs    = 0;
-    isRecording      = true;
-
-    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordingChunks.push(e.data); };
-
-    mediaRecorder.onstop = async () => {
-      stream.getTracks().forEach(t => t.stop());
-      isRecording = false;
-      restoreDropzone();
-      const blob     = new Blob(recordingChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
-      const buffer   = await blob.arrayBuffer();
-      const filePath = await api.saveRecording(new Uint8Array(buffer));
-      if (filePath) await handleFile(filePath);
-    };
-
-    mediaRecorder.start(250);
-
-    dropzone.innerHTML = `
-      <div class="rec-state">
-        <div class="rec-dot"></div>
-        <span class="rec-timer" id="rec-timer">0:00</span>
-      </div>
-      <div class="rec-label">Recording from microphone…</div>
-      <div class="rec-buttons">
-        <button class="btn-primary" id="stop-record-btn">Stop</button>
-        <button class="btn-secondary" id="cancel-record-btn">Cancel</button>
-      </div>`;
-    dropzone.classList.remove('has-file', 'hover');
-    transcribeBtnArea.classList.remove('visible');
-    statusArea.classList.remove('visible');
-
-    document.getElementById('stop-record-btn').addEventListener('click',   (e) => { e.stopPropagation(); stopRecording();   });
-    document.getElementById('cancel-record-btn').addEventListener('click', (e) => { e.stopPropagation(); cancelRecording(); });
-
-    recordingTimer = setInterval(() => {
-      recordingSecs++;
-      const el = document.getElementById('rec-timer');
-      if (el) el.textContent = `${Math.floor(recordingSecs / 60)}:${String(recordingSecs % 60).padStart(2, '0')}`;
-    }, 1000);
-
+    startRecordingWithStream(stream, 'Recording from microphone…');
   } catch (e) {
-    isRecording = false;
     showStatus('error', e.name === 'NotAllowedError'
       ? 'Microphone access denied. Check System Settings → Privacy & Security → Microphone.'
       : `Could not access microphone: ${e.message}`);
   }
+});
+
+document.getElementById('system-audio-btn').addEventListener('click', async () => {
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    const audioTracks = stream.getAudioTracks();
+    stream.getVideoTracks().forEach(t => t.stop());
+    if (audioTracks.length === 0) {
+      showStatus('error', 'No audio captured. Enable the audio option in the screen picker.');
+      return;
+    }
+    startRecordingWithStream(new MediaStream(audioTracks), 'Capturing system audio…');
+  } catch (e) {
+    if (e.name === 'NotAllowedError') {
+      showStatus('error', 'Screen recording access denied. Check System Settings → Privacy & Security → Screen Recording.');
+    } else {
+      showStatus('error', `Could not capture system audio: ${e.message}`);
+    }
+  }
+});
+
+function startRecordingWithStream(stream, label) {
+  activeStream    = stream;
+  mediaRecorder   = new MediaRecorder(stream);
+  recordingChunks = [];
+  recordingSecs   = 0;
+  isRecording     = true;
+
+  mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordingChunks.push(e.data); };
+
+  mediaRecorder.onstop = async () => {
+    activeStream?.getTracks().forEach(t => t.stop());
+    activeStream = null;
+    isRecording  = false;
+    restoreDropzone();
+    const blob     = new Blob(recordingChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+    const buffer   = await blob.arrayBuffer();
+    const filePath = await api.saveRecording(new Uint8Array(buffer));
+    if (filePath) await handleFile(filePath);
+  };
+
+  mediaRecorder.start(250);
+
+  dropzone.innerHTML = `
+    <div class="rec-state">
+      <div class="rec-dot"></div>
+      <span class="rec-timer" id="rec-timer">0:00</span>
+    </div>
+    <div class="rec-label">${label}</div>
+    <div class="rec-buttons">
+      <button class="btn-primary" id="stop-record-btn">Stop</button>
+      <button class="btn-secondary" id="cancel-record-btn">Cancel</button>
+    </div>`;
+  dropzone.classList.remove('has-file', 'hover');
+  inputOptions.classList.add('hidden');
+  transcribeBtnArea.classList.remove('visible');
+  statusArea.classList.remove('visible');
+
+  document.getElementById('stop-record-btn').addEventListener('click',   (e) => { e.stopPropagation(); stopRecording();   });
+  document.getElementById('cancel-record-btn').addEventListener('click', (e) => { e.stopPropagation(); cancelRecording(); });
+
+  recordingTimer = setInterval(() => {
+    recordingSecs++;
+    const el = document.getElementById('rec-timer');
+    if (el) el.textContent = `${Math.floor(recordingSecs / 60)}:${String(recordingSecs % 60).padStart(2, '0')}`;
+  }, 1000);
 }
 
 function stopRecording() {
@@ -121,8 +143,7 @@ function cancelRecording() {
   clearInterval(recordingTimer);
   isRecording = false;
   if (mediaRecorder && mediaRecorder.state === 'recording') {
-    mediaRecorder.onstop = () => {};
-    mediaRecorder.stream?.getTracks().forEach(t => t.stop());
+    mediaRecorder.onstop = () => { activeStream?.getTracks().forEach(t => t.stop()); activeStream = null; };
     mediaRecorder.stop();
   }
   restoreDropzone();
@@ -132,7 +153,43 @@ function restoreDropzone() {
   dropzone.innerHTML = DROPZONE_DEFAULT_HTML;
   dropzone.classList.remove('has-file', 'hover');
   dropzone.onclick = null;
-  attachRecordBtn();
+  inputOptions.classList.remove('hidden');
+}
+
+// ── URL Input ─────────────────────────────────────────────────────────────────
+urlLoadBtn.addEventListener('click', () => loadUrl(urlInput.value.trim()));
+urlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadUrl(urlInput.value.trim()); });
+
+async function loadUrl(url) {
+  if (!url) return;
+  let parsed;
+  try { parsed = new URL(url); } catch { showStatus('error', 'Invalid URL.'); return; }
+
+  const filename = parsed.pathname.split('/').pop() || parsed.hostname;
+  currentFilePath = url;
+  currentFileName = filename.replace(/\.[^.]+$/, '') || 'stream';
+
+  dropzone.classList.add('has-file');
+  dropzone.innerHTML = `
+    <svg class="mic-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+      <line x1="12" y1="19" x2="12" y2="23"/>
+      <line x1="8" y1="23" x2="16" y2="23"/>
+    </svg>
+    <div class="file-info">
+      <div class="file-name">${filename || url}</div>
+      <div class="file-meta">${parsed.hostname} · URL · Click to change</div>
+    </div>`;
+  dropzone.onclick = () => fileInput.click();
+  urlInput.value = '';
+
+  transcribeBtnArea.classList.add('visible');
+  statusArea.classList.remove('visible');
+  transcriptSection.classList.remove('visible');
+  setExportEnabled(false);
+  transcriptEl.value = '';
+  updateCharCount();
 }
 
 // ── Drop Zone ─────────────────────────────────────────────────────────────────
@@ -183,14 +240,9 @@ async function handleFile(filePath) {
       <div class="file-name">${info.name}</div>
       <div class="file-meta">${info.ext.toUpperCase()} · ${sizeMB} MB · Click to change</div>
     </div>
-    <button class="btn-record" id="record-btn" title="Record from microphone">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
-      Record
-    </button>
   `;
 
   dropzone.onclick = () => fileInput.click();
-  attachRecordBtn();
 
   transcribeBtnArea.classList.add('visible');
   statusArea.classList.remove('visible');

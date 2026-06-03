@@ -85,20 +85,55 @@ const MODELS = {
   medium: { label: 'Medium (1.5 GB)', name: 'medium' },
 };
 
-// Convert any audio format to 16 kHz mono WAV required by whisper-cli.
-// Returns the path to the WAV file (may be a new temp file).
+const YOUTUBE_RE = /(?:youtube\.com\/(?:watch\?.*v=|shorts\/)|youtu\.be\/)[\w-]{11}/;
+
+// Convert any local file or URL to 16 kHz mono WAV required by whisper-cli.
 function convertToWav(inputPath) {
+  const outPath = path.join(os.tmpdir(), `whisper-${Date.now()}.wav`);
+
+  if (YOUTUBE_RE.test(inputPath)) {
+    // YouTube: use yt-dlp to extract audio, then ffmpeg to normalise to 16 kHz mono WAV
+    const rawPath = outPath.replace('.wav', '-raw.%(ext)s');
+    return new Promise((resolve, reject) => {
+      execFile('yt-dlp',
+        ['-x', '--audio-format', 'best', '-o', rawPath, '--no-playlist', inputPath],
+        { env: process.env },
+        (err) => {
+          if (err) return reject(new Error('Could not download YouTube audio. Install yt-dlp: brew install yt-dlp'));
+          // Find the downloaded file (extension varies)
+          const base = rawPath.replace('.%(ext)s', '');
+          const found = require('fs').readdirSync(os.tmpdir())
+            .map(f => path.join(os.tmpdir(), f))
+            .find(f => f.startsWith(base) && !f.endsWith('.wav'));
+          if (!found) return reject(new Error('yt-dlp download succeeded but output file not found.'));
+          execFile('ffmpeg',
+            ['-nostats', '-loglevel', 'error', '-y', '-i', found,
+             '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', outPath],
+            { env: process.env },
+            (err2) => {
+              fs.unlink(found, () => {});
+              if (err2) reject(new Error('ffmpeg conversion failed after yt-dlp download.'));
+              else resolve(outPath);
+            }
+          );
+        }
+      );
+    });
+  }
+
   return new Promise((resolve, reject) => {
-    const ext = path.extname(inputPath).toLowerCase();
-    const outPath = path.join(os.tmpdir(), `whisper-${Date.now()}.wav`);
     execFile(
       'ffmpeg',
       ['-nostats', '-loglevel', 'error', '-y', '-i', inputPath,
        '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', outPath],
       { env: process.env },
       (err) => {
-        if (err) reject(new Error('ffmpeg conversion failed. Is ffmpeg installed? (brew install ffmpeg)'));
-        else resolve(outPath);
+        if (err) {
+          const isUrl = /^https?:\/\//i.test(inputPath);
+          reject(new Error(isUrl
+            ? 'Could not load URL. Check the link is accessible and points to audio or video.'
+            : 'ffmpeg conversion failed. Is ffmpeg installed? (brew install ffmpeg)'));
+        } else resolve(outPath);
       }
     );
   });
@@ -197,8 +232,9 @@ async function transcribeAudio(filePath, language, includeTimestamps, model = 'b
   let wavPath;
   let cleanupWav = false;
   try {
+    const isUrl = /^https?:\/\//i.test(filePath);
     const ext = path.extname(filePath).toLowerCase();
-    if (ext === '.wav') {
+    if (!isUrl && ext === '.wav') {
       wavPath = filePath;
     } else {
       onProgress(2);
