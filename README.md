@@ -10,7 +10,7 @@ A native-feeling macOS desktop app for offline audio and video transcription, po
 | Drag & drop or browse | Drop a file onto the window or use File → Open |
 | Record from microphone | Click **Record from microphone** to capture live audio |
 | Capture system audio | Click **Capture system audio** to record whatever is playing on your Mac |
-| URL | Paste a direct link to audio or video and click **Load**; YouTube links are supported natively |
+| URL | Paste a direct link to audio or video and click **Load**; YouTube links supported (install `yt-dlp` via Homebrew for best reliability) |
 
 ### Supported formats
 Audio: MP3, M4A, WAV, OGG, WebM, FLAC  
@@ -48,6 +48,7 @@ TXT · Markdown · DOCX (Word) · SRT (subtitles) · PDF
 - Node.js 18+
 - [ffmpeg](https://ffmpeg.org/) — `brew install ffmpeg`
 - [cmake](https://cmake.org/) — `brew install cmake` (needed to build whisper-cli)
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) *(recommended for YouTube)* — `brew install yt-dlp`
 
 ## Development
 
