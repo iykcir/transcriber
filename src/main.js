@@ -218,10 +218,12 @@ ipcMain.handle('tts-speak-edge', async (_, text, voice) => {
 
   const dataUrls = [];
   for (const chunk of chunks) {
-    const tmpPath = path.join(os.tmpdir(), `tts-${Date.now()}.mp3`);
-    await tts.toFile(tmpPath, chunk);
-    const data = fs.readFileSync(tmpPath);
-    fs.unlinkSync(tmpPath);
+    // toFile() treats its first arg as a directory and writes audio.mp3 inside it
+    const tmpDir = path.join(os.tmpdir(), `tts-${Date.now()}`);
+    await tts.toFile(tmpDir, chunk);
+    const audioPath = path.join(tmpDir, 'audio.mp3');
+    const data = fs.readFileSync(audioPath);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
     dataUrls.push(`data:audio/mp3;base64,${data.toString('base64')}`);
   }
   return dataUrls;
