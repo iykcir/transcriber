@@ -142,10 +142,12 @@ function showAbout() {
 ipcMain.handle('get-settings', () => {
   const config = readConfig();
   return {
-    language:  config.language  || 'auto',
+    language:   config.language   || 'auto',
     timestamps: config.timestamps || false,
-    model:     config.model     || 'base',
-    translate: config.translate  || false,
+    model:      config.model      || 'base',
+    translate:  config.translate  || false,
+    ttsEngine:  config.ttsEngine  || 'system',
+    ttsVoice:   config.ttsVoice   || '',
   };
 });
 
@@ -187,6 +189,42 @@ ipcMain.handle('save-txt', async (_, { transcript, filename }) => {
   if (result.canceled) return null;
   fs.writeFileSync(result.filePath, transcript, 'utf8');
   return result.filePath;
+});
+
+let cachedEdgeVoices = null;
+ipcMain.handle('get-edge-voices', async () => {
+  if (!cachedEdgeVoices) {
+    const { MsEdgeTTS } = require('msedge-tts');
+    const tts = new MsEdgeTTS();
+    cachedEdgeVoices = await tts.getVoices();
+  }
+  return cachedEdgeVoices;
+});
+
+ipcMain.handle('tts-speak-edge', async (_, text, voice) => {
+  const { MsEdgeTTS, OUTPUT_FORMAT } = require('msedge-tts');
+  // Chunk at sentence boundaries to stay within API limits
+  const sentences = text.match(/[^.!?\n]+[.!?\n]+/g) || [text];
+  const chunks = [];
+  let current = '';
+  for (const s of sentences) {
+    if (current.length + s.length > 3500 && current) { chunks.push(current.trim()); current = s; }
+    else current += s;
+  }
+  if (current.trim()) chunks.push(current.trim());
+
+  const tts = new MsEdgeTTS();
+  await tts.setMetadata(voice || 'en-US-AvaNeural', OUTPUT_FORMAT.AUDIO_24KHZ_96KBITRATE_MONO_MP3);
+
+  const dataUrls = [];
+  for (const chunk of chunks) {
+    const tmpPath = path.join(os.tmpdir(), `tts-${Date.now()}.mp3`);
+    await tts.toFile(tmpPath, chunk);
+    const data = fs.readFileSync(tmpPath);
+    fs.unlinkSync(tmpPath);
+    dataUrls.push(`data:audio/mp3;base64,${data.toString('base64')}`);
+  }
+  return dataUrls;
 });
 
 ipcMain.handle('translate-text', async (_, text) => {

@@ -19,8 +19,13 @@ const transcribeBtn     = document.getElementById('transcribe-btn');
 const progressBarWrap   = document.getElementById('progress-bar-wrap');
 const progressFill      = document.getElementById('progress-fill');
 const progressLabel     = document.getElementById('progress-label');
-const btnCopy           = document.getElementById('btn-copy');
-const btnTranslate      = document.getElementById('btn-translate');
+const btnCopy              = document.getElementById('btn-copy');
+const btnTranslate         = document.getElementById('btn-translate');
+const readAloudControls    = document.getElementById('read-aloud-controls');
+const btnRead              = document.getElementById('btn-read');
+const btnReadStop          = document.getElementById('btn-read-stop');
+const ttsEngineSelect      = document.getElementById('tts-engine-select');
+const ttsVoiceSelect       = document.getElementById('tts-voice-select');
 const btnTxt            = document.getElementById('btn-txt');
 const btnMd             = document.getElementById('btn-md');
 const btnDocx           = document.getElementById('btn-docx');
@@ -197,6 +202,8 @@ async function loadUrl(url) {
   transcriptSection.classList.remove('visible');
   setExportEnabled(false);
   btnTranslate.style.display = 'none';
+  readAloudControls.style.display = 'none';
+  stopReadAloud();
   transcriptEl.value = '';
   updateCharCount();
 
@@ -270,6 +277,8 @@ async function handleFile(filePath) {
   transcriptSection.classList.remove('visible');
   setExportEnabled(false);
   btnTranslate.style.display = 'none';
+  readAloudControls.style.display = 'none';
+  stopReadAloud();
   transcriptEl.value = '';
   updateCharCount();
 }
@@ -283,6 +292,8 @@ async function startTranscription() {
 
   transcribeBtn.disabled = true;
   btnTranslate.style.display = 'none';
+  readAloudControls.style.display = 'none';
+  stopReadAloud();
   showStatus('loading', 'Loading model…');
   transcriptSection.classList.remove('visible');
   setExportEnabled(false);
@@ -295,6 +306,7 @@ async function startTranscription() {
     transcriptSection.classList.add('visible');
     setExportEnabled(true);
     btnTranslate.style.display = '';
+    readAloudControls.style.display = '';
   } catch (e) {
     showStatus('error', e.message || 'Transcription failed.');
   } finally {
@@ -319,6 +331,143 @@ async function translateTranscript() {
     showStatus('error', `Translation failed: ${e.message}`);
   } finally {
     btnTranslate.disabled = false;
+  }
+}
+
+// ── Read Aloud ────────────────────────────────────────────────────────────────
+let ttsState       = 'idle'; // idle | loading | playing | paused
+let ttsAudio       = null;   // HTMLAudioElement (Edge engine)
+let ttsChunkUrls   = [];     // queued data URLs for Edge chunks
+let ttsChunkIndex  = 0;
+let ttsUtterance   = null;   // SpeechSynthesisUtterance (system engine)
+
+btnRead.addEventListener('click', () => {
+  if (ttsState === 'idle')    startReadAloud();
+  else if (ttsState === 'playing') pauseReadAloud();
+  else if (ttsState === 'paused')  resumeReadAloud();
+});
+btnReadStop.addEventListener('click', stopReadAloud);
+
+function updateReadAloudUI() {
+  if (ttsState === 'idle') {
+    btnRead.textContent = '▶ Read Aloud';
+    btnRead.disabled    = false;
+    btnReadStop.style.display = 'none';
+  } else if (ttsState === 'loading') {
+    btnRead.textContent = 'Loading…';
+    btnRead.disabled    = true;
+    btnReadStop.style.display = '';
+  } else if (ttsState === 'playing') {
+    btnRead.textContent = '⏸ Pause';
+    btnRead.disabled    = false;
+    btnReadStop.style.display = '';
+  } else if (ttsState === 'paused') {
+    btnRead.textContent = '▶ Resume';
+    btnRead.disabled    = false;
+    btnReadStop.style.display = '';
+  }
+}
+
+async function startReadAloud() {
+  const text = transcriptEl.value.trim();
+  if (!text) return;
+  const settings = await api.getSettings();
+  const engine   = settings.ttsEngine || 'system';
+  const voice    = settings.ttsVoice  || '';
+
+  if (engine === 'edge') {
+    ttsState = 'loading';
+    updateReadAloudUI();
+    try {
+      ttsChunkUrls  = await api.speakEdge(text, voice);
+      ttsChunkIndex = 0;
+      playNextEdgeChunk();
+    } catch (e) {
+      ttsState = 'idle';
+      updateReadAloudUI();
+      showStatus('error', `Read aloud failed: ${e.message}`);
+    }
+  } else {
+    window.speechSynthesis.cancel();
+    ttsUtterance = new SpeechSynthesisUtterance(text);
+    if (voice) {
+      const v = window.speechSynthesis.getVoices().find(vv => vv.name === voice);
+      if (v) ttsUtterance.voice = v;
+    }
+    ttsUtterance.onstart = () => { ttsState = 'playing'; updateReadAloudUI(); };
+    ttsUtterance.onend   = () => { ttsState = 'idle';    ttsUtterance = null; updateReadAloudUI(); };
+    ttsUtterance.onerror = () => { ttsState = 'idle';    ttsUtterance = null; updateReadAloudUI(); };
+    window.speechSynthesis.speak(ttsUtterance);
+    ttsState = 'playing';
+    updateReadAloudUI();
+  }
+}
+
+function playNextEdgeChunk() {
+  if (ttsChunkIndex >= ttsChunkUrls.length) {
+    ttsState = 'idle'; ttsAudio = null; updateReadAloudUI(); return;
+  }
+  ttsAudio = new Audio(ttsChunkUrls[ttsChunkIndex++]);
+  ttsAudio.onended = () => { if (ttsState !== 'idle') playNextEdgeChunk(); };
+  ttsAudio.onerror = () => { ttsState = 'idle'; ttsAudio = null; updateReadAloudUI(); };
+  ttsAudio.play();
+  ttsState = 'playing';
+  updateReadAloudUI();
+}
+
+function pauseReadAloud() {
+  if (ttsAudio) ttsAudio.pause();
+  else window.speechSynthesis.pause();
+  ttsState = 'paused';
+  updateReadAloudUI();
+}
+
+function resumeReadAloud() {
+  if (ttsAudio) ttsAudio.play();
+  else window.speechSynthesis.resume();
+  ttsState = 'playing';
+  updateReadAloudUI();
+}
+
+function stopReadAloud() {
+  if (ttsAudio) { ttsAudio.pause(); ttsAudio = null; }
+  ttsChunkUrls  = [];
+  ttsChunkIndex = 0;
+  window.speechSynthesis.cancel();
+  ttsUtterance  = null;
+  ttsState      = 'idle';
+  updateReadAloudUI();
+}
+
+async function populateTtsVoices(engine, selectedVoice) {
+  ttsVoiceSelect.innerHTML = '<option value="">Default</option>';
+  if (engine === 'edge') {
+    try {
+      const voices = await api.getEdgeVoices();
+      const lang   = languageSelect.value || 'auto';
+      const prefix = lang === 'auto' ? 'en' : lang;
+      const list   = voices.filter(v => v.Locale.toLowerCase().startsWith(prefix));
+      (list.length ? list : voices.filter(v => v.Locale.startsWith('en'))).forEach(v => {
+        const opt = document.createElement('option');
+        opt.value = v.ShortName;
+        opt.textContent = v.FriendlyName.replace('Microsoft ', '');
+        opt.selected = v.ShortName === selectedVoice;
+        ttsVoiceSelect.appendChild(opt);
+      });
+    } catch { ttsVoiceSelect.innerHTML = '<option value="">Could not load voices</option>'; }
+  } else {
+    let voices = window.speechSynthesis.getVoices();
+    if (!voices.length) {
+      await new Promise(r => { speechSynthesis.addEventListener('voiceschanged', r, { once: true }); setTimeout(r, 800); });
+      voices = window.speechSynthesis.getVoices();
+    }
+    voices.forEach(v => {
+      const opt = document.createElement('option');
+      opt.value = v.name;
+      opt.textContent = v.name;
+      opt.selected = v.name === selectedVoice;
+      ttsVoiceSelect.appendChild(opt);
+    });
   }
 }
 
@@ -407,6 +556,8 @@ async function openSettings() {
   languageSelect.value = settings.language || 'auto';
   timestampsToggle.checked = !!settings.timestamps;
   translateToggle.checked  = !!settings.translate;
+  ttsEngineSelect.value = settings.ttsEngine || 'system';
+  await populateTtsVoices(ttsEngineSelect.value, settings.ttsVoice || '');
   settingsOverlay.classList.add('visible');
 }
 
@@ -421,12 +572,16 @@ settingsOverlay.addEventListener('click', (e) => {
   if (e.target === settingsOverlay) closeSettings();
 });
 
+ttsEngineSelect.addEventListener('change', () => populateTtsVoices(ttsEngineSelect.value, ''));
+
 settingsSave.addEventListener('click', async () => {
   await api.setSettings({
     model:      modelSelect.value,
     language:   languageSelect.value,
     timestamps: timestampsToggle.checked,
     translate:  translateToggle.checked,
+    ttsEngine:  ttsEngineSelect.value,
+    ttsVoice:   ttsVoiceSelect.value,
   });
   closeSettings();
   showToast('Settings saved');
