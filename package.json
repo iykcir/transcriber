@@ -39,6 +39,7 @@
   },
   "dependencies": {
     "@distube/ytdl-core": "^4.16.12",
+    "@vitalets/google-translate-api": "^9.2.1",
     "docx": "^9.7.1",
     "nodejs-whisper": "^0.3.0",
     "pdfkit": "^0.15.0"

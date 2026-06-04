@@ -153,13 +153,13 @@ ipcMain.handle('set-settings', (_, settings) => {
   writeConfig(settings);
 });
 
-ipcMain.handle('transcribe', async (_, filePath, translateOverride) => {
+ipcMain.handle('transcribe', async (_, filePath) => {
   const { transcribeAudio } = require('./transcribe');
   const config = readConfig();
   const language  = config.language  || 'auto';
   const timestamps = config.timestamps || false;
   const model     = config.model     || 'base';
-  const translate = translateOverride !== undefined ? translateOverride : (config.translate || false);
+  const translate = config.translate  || false;
   return transcribeAudio(filePath, language, timestamps, model, translate,
     (pct) => mainWindow?.webContents.send('transcription-progress', pct),
     (pct) => mainWindow?.webContents.send('model-download-progress', pct),
@@ -187,6 +187,16 @@ ipcMain.handle('save-txt', async (_, { transcript, filename }) => {
   if (result.canceled) return null;
   fs.writeFileSync(result.filePath, transcript, 'utf8');
   return result.filePath;
+});
+
+ipcMain.handle('translate-text', async (_, text) => {
+  const { translate } = require('@vitalets/google-translate-api');
+  // Chunk large texts to stay within API limits (~5000 chars per request)
+  const CHUNK = 4800;
+  const chunks = [];
+  for (let i = 0; i < text.length; i += CHUNK) chunks.push(text.slice(i, i + CHUNK));
+  const results = await Promise.all(chunks.map(c => translate(c, { to: 'en' })));
+  return results.map(r => r.text).join('');
 });
 
 ipcMain.handle('save-docx', async (_, { transcript, filename }) => {

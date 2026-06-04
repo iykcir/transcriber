@@ -161,15 +161,7 @@ function restoreDropzone() {
 urlLoadBtn.addEventListener('click', () => loadUrl(urlInput.value.trim()));
 urlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadUrl(urlInput.value.trim()); });
 
-async function loadUrl(url) {
-  if (!url) return;
-  let parsed;
-  try { parsed = new URL(url); } catch { showStatus('error', 'Invalid URL.'); return; }
-
-  const filename = parsed.pathname.split('/').pop() || parsed.hostname;
-  currentFilePath = url;
-  currentFileName = filename.replace(/\.[^.]+$/, '') || 'stream';
-
+function setDropzoneUrl(displayName, meta) {
   dropzone.classList.add('has-file');
   dropzone.innerHTML = `
     <svg class="mic-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -179,12 +171,27 @@ async function loadUrl(url) {
       <line x1="8" y1="23" x2="16" y2="23"/>
     </svg>
     <div class="file-info">
-      <div class="file-name">${filename || url}</div>
-      <div class="file-meta">${parsed.hostname} · URL · Click to change</div>
+      <div class="file-name">${displayName}</div>
+      <div class="file-meta">${meta} · Click to change</div>
     </div>`;
   dropzone.onclick = () => fileInput.click();
-  urlInput.value = '';
+}
 
+async function loadUrl(url) {
+  if (!url) return;
+  let parsed;
+  try { parsed = new URL(url); } catch { showStatus('error', 'Invalid URL.'); return; }
+
+  currentFilePath = url;
+
+  // Show the URL immediately as a placeholder
+  const isYouTube = /youtube\.com|youtu\.be/.test(parsed.hostname);
+  const pathFile = parsed.pathname.split('/').filter(Boolean).pop();
+  const initialName = (pathFile && pathFile !== 'watch') ? decodeURIComponent(pathFile) : url;
+  currentFileName = initialName.replace(/\.[^.]+$/, '') || 'stream';
+  setDropzoneUrl(initialName, parsed.hostname);
+
+  urlInput.value = '';
   transcribeBtnArea.classList.add('visible');
   statusArea.classList.remove('visible');
   transcriptSection.classList.remove('visible');
@@ -192,6 +199,18 @@ async function loadUrl(url) {
   btnTranslate.style.display = 'none';
   transcriptEl.value = '';
   updateCharCount();
+
+  // For YouTube, fetch the real title via the public oEmbed API
+  if (isYouTube) {
+    try {
+      const res = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`);
+      if (res.ok) {
+        const data = await res.json();
+        currentFileName = data.title;
+        setDropzoneUrl(data.title, `YouTube · ${data.author_name}`);
+      }
+    } catch {}
+  }
 }
 
 // ── Drop Zone ─────────────────────────────────────────────────────────────────
@@ -257,9 +276,9 @@ async function handleFile(filePath) {
 
 // ── Transcription ─────────────────────────────────────────────────────────────
 transcribeBtn.addEventListener('click', () => startTranscription(false));
-btnTranslate.addEventListener('click', () => startTranscription(true));
+btnTranslate.addEventListener('click', translateTranscript);
 
-async function startTranscription(translateOverride) {
+async function startTranscription() {
   if (!currentFilePath) return;
 
   transcribeBtn.disabled = true;
@@ -269,17 +288,37 @@ async function startTranscription(translateOverride) {
   setExportEnabled(false);
 
   try {
-    const text = await api.transcribe(currentFilePath, translateOverride || undefined);
+    const text = await api.transcribe(currentFilePath);
     transcriptEl.value = text;
     updateCharCount();
-    showStatus('ok', translateOverride ? 'Translation complete!' : 'Transcription complete!');
+    showStatus('ok', 'Transcription complete!');
     transcriptSection.classList.add('visible');
     setExportEnabled(true);
-    if (!translateOverride) btnTranslate.style.display = '';
+    btnTranslate.style.display = '';
   } catch (e) {
     showStatus('error', e.message || 'Transcription failed.');
   } finally {
     transcribeBtn.disabled = false;
+  }
+}
+
+async function translateTranscript() {
+  const original = transcriptEl.value;
+  if (!original.trim()) return;
+
+  btnTranslate.disabled = true;
+  showStatus('loading', 'Translating…');
+
+  try {
+    const translated = await api.translateText(original);
+    transcriptEl.value = translated;
+    updateCharCount();
+    showStatus('ok', 'Translation complete!');
+    btnTranslate.style.display = 'none';
+  } catch (e) {
+    showStatus('error', `Translation failed: ${e.message}`);
+  } finally {
+    btnTranslate.disabled = false;
   }
 }
 
