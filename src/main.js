@@ -203,6 +203,7 @@ ipcMain.handle('get-edge-voices', async () => {
 
 ipcMain.handle('tts-speak-edge', async (_, text, voice) => {
   const { MsEdgeTTS, OUTPUT_FORMAT } = require('msedge-tts');
+
   // Chunk at sentence boundaries to stay within API limits
   const sentences = text.match(/[^.!?\n]+[.!?\n]+/g) || [text];
   const chunks = [];
@@ -218,12 +219,15 @@ ipcMain.handle('tts-speak-edge', async (_, text, voice) => {
 
   const dataUrls = [];
   for (const chunk of chunks) {
-    // toFile() treats its first arg as a directory and writes audio.mp3 inside it
-    const tmpDir = path.join(os.tmpdir(), `tts-${Date.now()}`);
-    await tts.toFile(tmpDir, chunk);
-    const audioPath = path.join(tmpDir, 'audio.mp3');
-    const data = fs.readFileSync(audioPath);
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    const { audioStream } = await tts.toStream(chunk);
+    const buffers = [];
+    await new Promise((resolve, reject) => {
+      audioStream.on('data', (d) => buffers.push(d));
+      audioStream.on('end', resolve);
+      audioStream.on('error', reject);
+    });
+    const data = Buffer.concat(buffers);
+    if (data.length === 0) throw new Error('Edge TTS returned no audio. Check your internet connection.');
     dataUrls.push(`data:audio/mp3;base64,${data.toString('base64')}`);
   }
   return dataUrls;
