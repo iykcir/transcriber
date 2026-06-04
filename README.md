@@ -1,6 +1,6 @@
 # Transcriber
 
-A native-feeling macOS desktop app for offline audio and video transcription, powered by [whisper.cpp](https://github.com/ggerganov/whisper.cpp). No API key, no internet required — everything runs on-device.
+A native-feeling macOS desktop app for offline audio and video transcription, powered by [whisper.cpp](https://github.com/ggerganov/whisper.cpp). No API key required — transcription runs entirely on-device.
 
 ## Features
 
@@ -9,8 +9,8 @@ A native-feeling macOS desktop app for offline audio and video transcription, po
 |---|---|
 | Drag & drop or browse | Drop a file onto the window or use File → Open |
 | Record from microphone | Click **Record from microphone** to capture live audio |
-| Capture system audio | Click **Capture system audio** to record whatever is playing on your Mac |
-| URL | Paste a direct link to audio or video and click **Load**; YouTube links supported (install `yt-dlp` via Homebrew for best reliability) |
+| Capture system audio | Click **Capture system audio** to record whatever is playing on your Mac (meetings, podcasts, videos) |
+| URL | Paste a direct link to audio or video and click **Load**; YouTube links are supported (install `yt-dlp` via Homebrew for best reliability) |
 
 ### Supported formats
 Audio: MP3, M4A, WAV, OGG, WebM, FLAC  
@@ -32,13 +32,24 @@ Downloaded automatically on first use and cached in `~/Library/Application Suppo
 ### Transcription options
 - **Language** — auto-detect or choose from 14 languages (English, Spanish, French, German, Italian, Portuguese, Dutch, Polish, Russian, Chinese, Japanese, Korean, Arabic, Hindi)
 - **Timestamps** — include `[HH:MM:SS → HH:MM:SS]` segment markers in the output
-- **Translate to English** — transcribes audio in any language and outputs English text
+- **Translate to English** — whisper transcribes audio in any language and outputs English text directly
+
+### Post-transcription
+- **Translate to English** — translates any completed transcript to English via Google Translate without re-transcribing
+- **Read Aloud** — reads the transcript aloud with play, pause, resume, and stop controls
+
+### Read Aloud engines (configurable in Settings)
+| Engine | Details |
+|---|---|
+| System Voice | Uses macOS built-in TTS. Install **Enhanced** or **Premium** voices in System Settings → Accessibility → Spoken Content for near-Siri quality |
+| Microsoft Edge | Streams high-quality neural voices from Microsoft (322 voices, 40+ languages). No API key needed. Voice list filtered to the current language setting |
 
 ### Export
 TXT · Markdown · DOCX (Word) · SRT (subtitles) · PDF
 
 ### Other
-- Progress bar during model download and transcription
+- Progress bar shows file name and phase (fetching, preparing, transcribing)
+- Model download progress shown on first use
 - Copy transcript to clipboard
 - Light/dark mode (follows system)
 
@@ -73,9 +84,10 @@ npm run build
 
 1. Launch the app (`npm start` or install from DMG)
 2. Choose an input — drop a file, record, capture system audio, or paste a URL
-3. Open **Settings** (⌘,) to choose a model, language, and other options
+3. Open **Settings** (⌘,) to choose a model, language, read aloud engine/voice, and other options
 4. Click **Transcribe**
-5. Edit the transcript if needed, then export or copy
+5. Edit the transcript if needed
+6. Use **▶ Read Aloud** to listen, **Translate to English** to translate, or export via the toolbar
 
 ## Keyboard shortcuts
 
