@@ -1,6 +1,6 @@
 {
   "name": "transcriber",
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "A macOS desktop app for transcribing audio files using OpenAI Whisper",
   "main": "src/main.js",
   "scripts": {
