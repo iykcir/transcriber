@@ -11,8 +11,6 @@ contextBridge.exposeInMainWorld('api', {
   saveMD:          (data)   => ipcRenderer.invoke('save-md',        data),
   saveRecording:   (buffer) => ipcRenderer.invoke('save-recording', buffer),
   translateText:   (text)         => ipcRenderer.invoke('translate-text',  text),
-  getEdgeVoices:   ()             => ipcRenderer.invoke('get-edge-voices'),
-  speakEdge:       (text, voice)  => ipcRenderer.invoke('tts-speak-edge', text, voice),
   showInFinder: (filePath) => ipcRenderer.invoke('show-in-finder', filePath),
   getPathForFile: (file) => webUtils.getPathForFile(file),
   getFileInfo: (filePath) => ipcRenderer.invoke('get-file-info', filePath),

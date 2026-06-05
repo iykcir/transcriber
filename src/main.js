@@ -146,8 +146,7 @@ ipcMain.handle('get-settings', () => {
     timestamps: config.timestamps || false,
     model:      config.model      || 'base',
     translate:  config.translate  || false,
-    ttsEngine:  config.ttsEngine  || 'system',
-    ttsVoice:   config.ttsVoice   || '',
+    ttsVoice: config.ttsVoice || '',
   };
 });
 
@@ -191,102 +190,6 @@ ipcMain.handle('save-txt', async (_, { transcript, filename }) => {
   return result.filePath;
 });
 
-let cachedEdgeVoices = null;
-ipcMain.handle('get-edge-voices', async () => {
-  if (!cachedEdgeVoices) {
-    const { MsEdgeTTS } = require('msedge-tts');
-    const tts = new MsEdgeTTS();
-    cachedEdgeVoices = await tts.getVoices();
-  }
-  return cachedEdgeVoices;
-});
-
-// Direct Edge TTS WebSocket implementation — avoids msedge-tts's ArrayBuffer
-// vs Buffer mismatch in Electron's main process.
-const EDGE_TTS_TOKEN = '6A5AA1D4EAFF4E9FB37E23D68491D6F4';
-
-async function edgeTtsUrl() {
-  const { webcrypto } = require('crypto');
-  const ticks = Math.floor(Date.now() / 1000) + 11644473600;
-  const rounded = ticks - (ticks % 300);
-  const windowsTicks = rounded * 10000000;
-  const data = new TextEncoder().encode(`${windowsTicks}${EDGE_TTS_TOKEN}`);
-  const hash = await webcrypto.subtle.digest('SHA-256', data);
-  const secMsGec = Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
-  const connId = Array.from({length: 32}, () => Math.floor(Math.random() * 16).toString(16)).join('');
-  return `wss://speech.platform.bing.com/consumer/speech/synthesize/readaloud/edge/v1?TrustedClientToken=${EDGE_TTS_TOKEN}&Sec-MS-GEC=${secMsGec}&Sec-MS-GEC-Version=1-143.0.3650.96&ConnectionId=${connId}`;
-}
-
-function xmlEscape(t) {
-  return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-async function synthesizeEdge(text, voice) {
-  const WebSocket = require('ws');
-  const url = await edgeTtsUrl();
-  const reqId = Array.from({length: 32}, () => Math.floor(Math.random() * 16).toString(16)).join('');
-  const ssml = `<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xml:lang="en-US"><voice name="${voice}"><prosody rate="0%" pitch="0%">${xmlEscape(text)}</prosody></voice></speak>`;
-
-  return new Promise((resolve, reject) => {
-    const ws = new WebSocket(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36 Edg/143.0.0.0',
-        'Origin': 'chrome-extension://jdiccldimpdaibmpdkjnbmckianbfold',
-      },
-    });
-
-    const audioChunks = [];
-    let resolved = false;
-
-    ws.on('open', () => {
-      ws.send(`X-Timestamp:${new Date().toISOString()}\r\nContent-Type:application/json; charset=utf-8\r\nPath:speech.config\r\n\r\n{"context":{"synthesis":{"audio":{"metadataoptions":{"sentenceBoundaryEnabled":"false","wordBoundaryEnabled":"false"},"outputFormat":"audio-24khz-96kbitrate-mono-mp3"}}}}`);
-      ws.send(`X-RequestId:${reqId}\r\nX-Timestamp:${new Date().toISOString()}\r\nContent-Type:application/ssml+xml\r\nPath:ssml\r\n\r\n${ssml}`);
-    });
-
-    ws.on('message', (data, isBinary) => {
-      if (isBinary) {
-        // Binary frame: 2-byte big-endian header length, then header, then audio
-        const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
-        const headerLen = buf.readUInt16BE(0);
-        const audio = buf.slice(2 + headerLen);
-        if (audio.length > 0) audioChunks.push(audio);
-      } else {
-        const msg = typeof data === 'string' ? data : data.toString();
-        if (msg.includes('Path:turn.end')) {
-          resolved = true;
-          ws.close();
-          const result = Buffer.concat(audioChunks);
-          if (result.length === 0) reject(new Error('Edge TTS returned no audio. Check your internet connection.'));
-          else resolve(result);
-        }
-      }
-    });
-
-    ws.on('close', () => { if (!resolved) reject(new Error('Edge TTS connection closed unexpectedly.')); });
-    ws.on('error', reject);
-  });
-}
-
-ipcMain.handle('tts-speak-edge', async (_, text, voice) => {
-  const selectedVoice = voice || 'en-US-AvaNeural';
-
-  // Chunk at sentence boundaries to stay within API limits
-  const sentences = text.match(/[^.!?\n]+[.!?\n]+/g) || [text];
-  const chunks = [];
-  let current = '';
-  for (const s of sentences) {
-    if (current.length + s.length > 3500 && current) { chunks.push(current.trim()); current = s; }
-    else current += s;
-  }
-  if (current.trim()) chunks.push(current.trim());
-
-  const dataUrls = [];
-  for (const chunk of chunks) {
-    const data = await synthesizeEdge(chunk, selectedVoice);
-    dataUrls.push(`data:audio/mp3;base64,${data.toString('base64')}`);
-  }
-  return dataUrls;
-});
 
 ipcMain.handle('translate-text', async (_, text) => {
   const { translate } = require('@vitalets/google-translate-api');
