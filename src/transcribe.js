@@ -5,6 +5,14 @@ const path = require('path');
 const os = require('os');
 const { app } = require('electron');
 
+// ffmpeg-static ships a pre-built static binary so users don't need to install
+// ffmpeg separately. In a packaged app the binary lives in app.asar.unpacked
+// (electron-builder extracts asarUnpack entries there so the OS can execute them).
+function getFfmpegPath() {
+  const bin = require('ffmpeg-static');
+  return app.isPackaged ? bin.replace('app.asar', 'app.asar.unpacked') : bin;
+}
+
 // In the packaged app, node_modules is inside app.asar and binaries inside it
 // cannot be spawned by the OS. electron-builder extracts asarUnpack entries to
 // app.asar.unpacked/ — use that path when packaged.
@@ -107,13 +115,13 @@ function downloadYouTube(url, outPath) {
             .map(f => path.join(os.tmpdir(), f))
             .find(f => f.startsWith(base));
           if (!found) return reject(new Error('yt-dlp download succeeded but output file not found.'));
-          execFile('ffmpeg',
+          execFile(getFfmpegPath(),
             ['-nostats', '-loglevel', 'error', '-y', '-i', found,
              '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', outPath],
             { env: process.env },
             (err2) => {
               fs.unlink(found, () => {});
-              if (err2) reject(new Error('ffmpeg conversion failed after yt-dlp download.'));
+              if (err2) reject(new Error('Audio conversion failed after yt-dlp download.'));
               else resolve(outPath);
             }
           );
@@ -134,7 +142,7 @@ function downloadYouTube(url, outPath) {
       ));
     }
 
-    const ffmpeg = spawn('ffmpeg',
+    const ffmpeg = spawn(getFfmpegPath(),
       ['-nostats', '-loglevel', 'error', '-y', '-i', 'pipe:0',
        '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', outPath],
       { env: process.env }
@@ -166,7 +174,7 @@ function convertToWav(inputPath) {
 
   return new Promise((resolve, reject) => {
     execFile(
-      'ffmpeg',
+      getFfmpegPath(),
       ['-nostats', '-loglevel', 'error', '-y', '-i', inputPath,
        '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', outPath],
       { env: process.env },
@@ -175,7 +183,7 @@ function convertToWav(inputPath) {
           const isUrl = /^https?:\/\//i.test(inputPath);
           reject(new Error(isUrl
             ? 'Could not load URL. Check the link is accessible and points to audio or video.'
-            : 'ffmpeg conversion failed. Is ffmpeg installed? (brew install ffmpeg)'));
+            : 'Audio conversion failed. The file may be corrupted or in an unsupported format.'));
         } else resolve(outPath);
       }
     );
@@ -297,7 +305,7 @@ async function transcribeAudio(filePath, language, includeTimestamps, model = 'b
     return transcript;
   } catch (err) {
     const msg = err.message || '';
-    if (msg.includes('ffmpeg')) throw new Error('ffmpeg is required.\n\nInstall it with:\n  brew install ffmpeg');
+    if (msg.includes('ffmpeg')) throw new Error('Audio conversion failed. The file may be corrupted or in an unsupported format.');
     throw new Error(`Transcription failed: ${msg}`);
   } finally {
     if (cleanupWav && wavPath && fs.existsSync(wavPath)) {

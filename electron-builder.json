@@ -29,7 +29,8 @@
   ],
   "asarUnpack": [
     "node_modules/nodejs-whisper/cpp/whisper.cpp/build/bin/whisper-cli",
-    "node_modules/nodejs-whisper/cpp/whisper.cpp/models/**"
+    "node_modules/nodejs-whisper/cpp/whisper.cpp/models/**",
+    "node_modules/ffmpeg-static/**"
   ],
   "nativeRebuilder": "sequential"
 }
