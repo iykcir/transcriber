@@ -39,13 +39,6 @@ Downloaded automatically on first use and cached in `~/Library/Application Suppo
 
 ### Post-transcription
 - **Translate to English** — translates any completed transcript to English via Google Translate without re-transcribing
-- **Read Aloud** — reads the transcript aloud with play, pause, resume, and stop controls
-
-### Read Aloud engines (configurable in Settings)
-| Engine | Details |
-|---|---|
-| System Voice | Uses macOS built-in TTS. Install **Enhanced** or **Premium** voices in System Settings → Accessibility → Spoken Content for near-Siri quality |
-| Microsoft Edge | Streams high-quality neural voices from Microsoft (322 voices, 40+ languages). No API key needed. Voice list filtered to the current language setting |
 
 ### Export
 TXT · Markdown · DOCX (Word) · SRT (subtitles) · PDF
@@ -89,10 +82,10 @@ npm run build
 1. Launch the app (`npm start` or install from DMG)
 2. Choose an input — drop a file, record, capture system audio, or paste a URL
 3. Optionally drag the waveform handles to trim to just the part you want, using the play/pause button to preview the selection
-4. Open **Settings** (⌘,) to choose a model, language, read aloud engine/voice, and other options
+4. Open **Settings** (⌘,) to choose a model, language, and other options
 5. Click **Transcribe**
 6. Edit the transcript if needed
-7. Use **▶ Read Aloud** to listen, **Translate to English** to translate, or export via the toolbar
+7. Use **Translate to English** to translate, or export via the toolbar
 
 ## Keyboard shortcuts
 

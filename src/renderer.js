@@ -34,10 +34,6 @@ const progressFill      = document.getElementById('progress-fill');
 const progressLabel     = document.getElementById('progress-label');
 const btnCopy              = document.getElementById('btn-copy');
 const btnTranslate         = document.getElementById('btn-translate');
-const readAloudControls    = document.getElementById('read-aloud-controls');
-const btnRead              = document.getElementById('btn-read');
-const btnReadStop          = document.getElementById('btn-read-stop');
-const ttsVoiceSelect       = document.getElementById('tts-voice-select');
 const btnTxt            = document.getElementById('btn-txt');
 const btnMd             = document.getElementById('btn-md');
 const btnDocx           = document.getElementById('btn-docx');
@@ -215,8 +211,6 @@ async function loadUrl(url) {
   transcriptSection.classList.remove('visible');
   setExportEnabled(false);
   btnTranslate.style.display = 'none';
-  readAloudControls.style.display = 'none';
-  stopReadAloud();
   transcriptEl.value = '';
   updateCharCount();
 
@@ -294,8 +288,6 @@ async function handleFile(filePath) {
   transcriptSection.classList.remove('visible');
   setExportEnabled(false);
   btnTranslate.style.display = 'none';
-  readAloudControls.style.display = 'none';
-  stopReadAloud();
   transcriptEl.value = '';
   updateCharCount();
 
@@ -488,8 +480,6 @@ async function startTranscription() {
 
   transcribeBtn.disabled = true;
   btnTranslate.style.display = 'none';
-  readAloudControls.style.display = 'none';
-  stopReadAloud();
   showStatus('loading', 'Loading model…');
   transcriptSection.classList.remove('visible');
   setExportEnabled(false);
@@ -503,7 +493,6 @@ async function startTranscription() {
     transcriptSection.classList.add('visible');
     setExportEnabled(true);
     btnTranslate.style.display = '';
-    readAloudControls.style.display = '';
   } catch (e) {
     showStatus('error', e.message || 'Transcription failed.');
   } finally {
@@ -529,92 +518,6 @@ async function translateTranscript() {
   } finally {
     btnTranslate.disabled = false;
   }
-}
-
-// ── Read Aloud ────────────────────────────────────────────────────────────────
-let ttsState     = 'idle'; // idle | playing | paused
-let ttsUtterance = null;
-
-btnRead.addEventListener('click', () => {
-  if (ttsState === 'idle')    startReadAloud();
-  else if (ttsState === 'playing') pauseReadAloud();
-  else if (ttsState === 'paused')  resumeReadAloud();
-});
-btnReadStop.addEventListener('click', stopReadAloud);
-
-function updateReadAloudUI() {
-  if (ttsState === 'idle') {
-    btnRead.textContent = '▶ Read Aloud';
-    btnRead.disabled    = false;
-    btnReadStop.style.display = 'none';
-  } else if (ttsState === 'loading') {
-    btnRead.textContent = 'Loading…';
-    btnRead.disabled    = true;
-    btnReadStop.style.display = '';
-  } else if (ttsState === 'playing') {
-    btnRead.textContent = '⏸ Pause';
-    btnRead.disabled    = false;
-    btnReadStop.style.display = '';
-  } else if (ttsState === 'paused') {
-    btnRead.textContent = '▶ Resume';
-    btnRead.disabled    = false;
-    btnReadStop.style.display = '';
-  }
-}
-
-async function startReadAloud() {
-  const text = transcriptEl.value.trim();
-  if (!text) return;
-  const settings = await api.getSettings();
-  const voice    = settings.ttsVoice || '';
-
-  window.speechSynthesis.cancel();
-  ttsUtterance = new SpeechSynthesisUtterance(text);
-  if (voice) {
-    const v = window.speechSynthesis.getVoices().find(vv => vv.name === voice);
-    if (v) ttsUtterance.voice = v;
-  }
-  ttsUtterance.onstart = () => { ttsState = 'playing'; updateReadAloudUI(); };
-  ttsUtterance.onend   = () => { ttsState = 'idle';    ttsUtterance = null; updateReadAloudUI(); };
-  ttsUtterance.onerror = () => { ttsState = 'idle';    ttsUtterance = null; updateReadAloudUI(); };
-  window.speechSynthesis.speak(ttsUtterance);
-  ttsState = 'playing';
-  updateReadAloudUI();
-}
-
-function pauseReadAloud() {
-  window.speechSynthesis.pause();
-  ttsState = 'paused';
-  updateReadAloudUI();
-}
-
-function resumeReadAloud() {
-  window.speechSynthesis.resume();
-  ttsState = 'playing';
-  updateReadAloudUI();
-}
-
-function stopReadAloud() {
-  window.speechSynthesis.cancel();
-  ttsUtterance = null;
-  ttsState     = 'idle';
-  updateReadAloudUI();
-}
-
-async function populateTtsVoices(selectedVoice) {
-  ttsVoiceSelect.innerHTML = '<option value="">Default</option>';
-  let voices = window.speechSynthesis.getVoices();
-  if (!voices.length) {
-    await new Promise(r => { speechSynthesis.addEventListener('voiceschanged', r, { once: true }); setTimeout(r, 800); });
-    voices = window.speechSynthesis.getVoices();
-  }
-  voices.forEach(v => {
-    const opt = document.createElement('option');
-    opt.value = v.name;
-    opt.textContent = v.name;
-    opt.selected = v.name === selectedVoice;
-    ttsVoiceSelect.appendChild(opt);
-  });
 }
 
 // ── Status ────────────────────────────────────────────────────────────────────
@@ -702,7 +605,6 @@ async function openSettings() {
   languageSelect.value = settings.language || 'auto';
   timestampsToggle.checked = !!settings.timestamps;
   translateToggle.checked  = !!settings.translate;
-  await populateTtsVoices(settings.ttsVoice || '');
   settingsOverlay.classList.add('visible');
 }
 
@@ -723,7 +625,6 @@ settingsSave.addEventListener('click', async () => {
     language:   languageSelect.value,
     timestamps: timestampsToggle.checked,
     translate:  translateToggle.checked,
-    ttsVoice:   ttsVoiceSelect.value,
   });
   closeSettings();
   showToast('Settings saved');

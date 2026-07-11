@@ -146,7 +146,6 @@ ipcMain.handle('get-settings', () => {
     timestamps: config.timestamps || false,
     model:      config.model      || 'base',
     translate:  config.translate  || false,
-    ttsVoice: config.ttsVoice || '',
   };
 });
 
