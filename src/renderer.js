@@ -25,6 +25,9 @@ const trimStartLabel    = document.getElementById('trim-start-label');
 const trimEndLabel      = document.getElementById('trim-end-label');
 const trimDurationLabel = document.getElementById('trim-duration-label');
 const previewAudio      = document.getElementById('preview-audio');
+const waveformPlayBtn   = document.getElementById('waveform-play-btn');
+const waveformPlayIcon  = document.getElementById('waveform-play-icon');
+const waveformPauseIcon = document.getElementById('waveform-pause-icon');
 const progressBarWrap   = document.getElementById('progress-bar-wrap');
 const progressFill      = document.getElementById('progress-fill');
 const progressLabel     = document.getElementById('progress-label');
@@ -315,6 +318,7 @@ function hideWaveform() {
   mediaDuration = 0;
   previewAudio.pause();
   previewAudio.removeAttribute('src');
+  waveformPlayBtn.disabled = true;
 }
 
 // Best-effort preview: silently skipped if ffmpeg can't decode the format
@@ -334,6 +338,7 @@ async function loadWaveform(filePath) {
 
     if (previewPath) {
       previewAudio.src = /^https?:\/\//i.test(previewPath) ? previewPath : api.toFileUrl(previewPath);
+      waveformPlayBtn.disabled = false;
     }
   } catch {}
 }
@@ -413,6 +418,35 @@ setupHandleDrag(handleStart, 'start');
 setupHandleDrag(handleEnd, 'end');
 
 window.addEventListener('resize', () => { if (waveformPeaks) drawWaveform(); });
+
+// ── Waveform preview playback ─────────────────────────────────────────────────
+// Plays the current trim selection in full (as opposed to scrubPreview's brief
+// snippet while dragging a handle), stopping automatically at the selection end.
+waveformPlayBtn.addEventListener('click', () => {
+  if (!previewAudio.src) return;
+  if (previewAudio.paused) {
+    if (previewAudio.currentTime < trimStart || previewAudio.currentTime >= trimEnd) {
+      previewAudio.currentTime = trimStart;
+    }
+    previewAudio.play().catch(() => {});
+  } else {
+    previewAudio.pause();
+  }
+});
+
+previewAudio.addEventListener('play', () => {
+  waveformPlayIcon.style.display = 'none';
+  waveformPauseIcon.style.display = '';
+});
+
+previewAudio.addEventListener('pause', () => {
+  waveformPlayIcon.style.display = '';
+  waveformPauseIcon.style.display = 'none';
+});
+
+previewAudio.addEventListener('timeupdate', () => {
+  if (previewAudio.currentTime >= trimEnd) previewAudio.pause();
+});
 
 // ── Transcription ─────────────────────────────────────────────────────────────
 transcribeBtn.addEventListener('click', () => startTranscription(false));

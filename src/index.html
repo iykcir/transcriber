@@ -604,11 +604,38 @@
 
     #waveform-section.visible { display: flex; }
 
+    #waveform-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
     #waveform-wrap {
       position: relative;
+      flex: 1;
       height: 64px;
       -webkit-app-region: no-drag;
     }
+
+    #waveform-play-btn {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      -webkit-app-region: no-drag;
+    }
+
+    #waveform-play-btn:hover { background: var(--border); }
+    #waveform-play-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    #waveform-play-icon { margin-left: 1px; }
 
     /* Visual clipping (rounded corners) lives on this inner layer so it
        doesn't also clip the drag handles' hit area at the 0%/100% edges. */
@@ -716,13 +743,19 @@
 
     <!-- Waveform trim -->
     <div id="waveform-section">
-      <div id="waveform-wrap">
-        <div id="waveform-clip">
-          <canvas id="waveform-canvas"></canvas>
-          <div id="waveform-selection"></div>
+      <div id="waveform-row">
+        <button id="waveform-play-btn" title="Preview selection" aria-label="Play/pause preview" disabled>
+          <svg id="waveform-play-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20"/></svg>
+          <svg id="waveform-pause-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="5" y="4" width="5" height="16"/><rect x="14" y="4" width="5" height="16"/></svg>
+        </button>
+        <div id="waveform-wrap">
+          <div id="waveform-clip">
+            <canvas id="waveform-canvas"></canvas>
+            <div id="waveform-selection"></div>
+          </div>
+          <div class="waveform-handle" id="handle-start"></div>
+          <div class="waveform-handle" id="handle-end"></div>
         </div>
-        <div class="waveform-handle" id="handle-start"></div>
-        <div class="waveform-handle" id="handle-end"></div>
       </div>
       <div id="waveform-times">
         <span id="trim-start-label">0:00</span>
