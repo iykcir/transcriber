@@ -4,7 +4,9 @@
       "Bash(node *)",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(pkill -f \"electron \\\\.\")"
+      "Bash(pkill -f \"electron \\\\.\")",
+      "Bash(npm run *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" https://www.youtube.com --max-time 5)"
     ]
   }
 }
