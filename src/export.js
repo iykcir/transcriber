@@ -51,7 +51,6 @@ async function exportPDF(transcript, title, outputPath) {
       });
 
     // Page numbers
-    const totalPages = doc.bufferedPageRange ? doc.bufferedPageRange().count : 1;
     const range = doc.bufferedPageRange ? doc.bufferedPageRange() : null;
     if (range) {
       for (let i = range.start; i < range.start + range.count; i++) {
@@ -77,7 +76,7 @@ async function exportPDF(transcript, title, outputPath) {
 }
 
 async function exportDOCX(transcript, title, outputPath) {
-  const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } = require('docx');
+  const { Document, Packer, Paragraph, TextRun, HeadingLevel } = require('docx');
 
   const dateStr = new Date().toLocaleDateString('en-US', {
     year: 'numeric', month: 'long', day: 'numeric',

@@ -138,7 +138,8 @@ function downloadYouTube(url, outPath) {
       ytStream = ytdl(url, { quality: 'highestaudio', filter: 'audioonly' });
     } catch (e) {
       return reject(new Error(
-        `Could not load YouTube URL.\nFor reliable YouTube support, install yt-dlp: brew install yt-dlp`
+        `Could not load YouTube URL.\nFor reliable YouTube support, install yt-dlp: brew install yt-dlp`,
+        { cause: e }
       ));
     }
 
@@ -305,8 +306,8 @@ async function transcribeAudio(filePath, language, includeTimestamps, model = 'b
     return transcript;
   } catch (err) {
     const msg = err.message || '';
-    if (msg.includes('ffmpeg')) throw new Error('Audio conversion failed. The file may be corrupted or in an unsupported format.');
-    throw new Error(`Transcription failed: ${msg}`);
+    if (msg.includes('ffmpeg')) throw new Error('Audio conversion failed. The file may be corrupted or in an unsupported format.', { cause: err });
+    throw new Error(`Transcription failed: ${msg}`, { cause: err });
   } finally {
     if (cleanupWav && wavPath && fs.existsSync(wavPath)) {
       fs.unlinkSync(wavPath);

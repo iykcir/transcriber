@@ -5,6 +5,7 @@
   "main": "src/main.js",
   "scripts": {
     "start": "electron .",
+    "lint": "eslint .",
     "build:whisper": "cd node_modules/nodejs-whisper/cpp/whisper.cpp && rm -rf build && /opt/homebrew/bin/cmake -B build -DBUILD_SHARED_LIBS=OFF && /opt/homebrew/bin/cmake --build build --config Release",
     "build": "npm run build:whisper && electron-builder",
     "pack": "npm run build:whisper && electron-builder --dir"
@@ -46,10 +47,13 @@
     "pdfkit": "^0.15.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "canvas": "^3.2.3",
     "electron": "^42.3.0",
     "electron-builder": "^26.8.1",
     "electron-rebuild": "^1.4.0",
+    "eslint": "^10.7.0",
+    "globals": "^17.7.0",
     "playwright-core": "^1.60.0"
   }
 }
