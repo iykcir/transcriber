@@ -10,14 +10,17 @@ A native-feeling macOS desktop app for offline audio and video transcription, po
 | Drag & drop or browse | Drop a file onto the window or use File → Open |
 | Record from microphone | Click **Record from microphone** to capture live audio |
 | Capture system audio | Click **Capture system audio** to record whatever is playing on your Mac (meetings, podcasts, videos) |
-| URL | Paste a direct link to audio or video and click **Load**; YouTube links are supported (install `yt-dlp` via Homebrew for best reliability) |
+| URL | Paste a direct link to audio or video and click **Load**; YouTube links are supported out of the box (the app manages its own `yt-dlp` binary, kept up to date automatically) |
 
 ### Supported formats
 Audio: MP3, M4A, WAV, OGG, WebM, FLAC  
 Video: MP4, MOV, MKV, AVI, M4V, WMV, 3GP, TS — audio is extracted automatically
 
 ### File size
-No limit. Files of any size are accepted; ffmpeg converts them to the 16 kHz mono WAV format whisper requires before transcription.
+No limit. Files of any size are accepted; a bundled copy of ffmpeg converts them to the 16 kHz mono WAV format whisper requires before transcription — no separate ffmpeg install needed.
+
+### Trim & preview
+Once a file loads, a waveform appears with draggable start/end handles to select just the part you want transcribed — useful for skipping a long intro or trimming a recording down to the relevant clip. Drag a handle to hear a brief snippet of where it lands, or use the **play/pause button** next to the waveform to play the full selection (auto-stopping at the end). Video files show a real video preview above the waveform instead of just an audio scrubber.
 
 ### Models
 Downloaded automatically on first use and cached in `~/Library/Application Support/Transcriber/models/`.
@@ -55,11 +58,12 @@ TXT · Markdown · DOCX (Word) · SRT (subtitles) · PDF
 
 ## Requirements
 
+To use the packaged app (DMG), just macOS 11+ — ffmpeg ships bundled, and yt-dlp is downloaded automatically on first YouTube use and kept up to date, so neither needs a separate install.
+
+To build from source:
 - macOS 11+
 - Node.js 18+
-- [ffmpeg](https://ffmpeg.org/) — `brew install ffmpeg`
-- [cmake](https://cmake.org/) — `brew install cmake` (needed to build whisper-cli)
-- [yt-dlp](https://github.com/yt-dlp/yt-dlp) *(recommended for YouTube)* — `brew install yt-dlp`
+- [cmake](https://cmake.org/) — `brew install cmake` (needed to compile whisper-cli)
 
 ## Development
 
@@ -84,10 +88,11 @@ npm run build
 
 1. Launch the app (`npm start` or install from DMG)
 2. Choose an input — drop a file, record, capture system audio, or paste a URL
-3. Open **Settings** (⌘,) to choose a model, language, read aloud engine/voice, and other options
-4. Click **Transcribe**
-5. Edit the transcript if needed
-6. Use **▶ Read Aloud** to listen, **Translate to English** to translate, or export via the toolbar
+3. Optionally drag the waveform handles to trim to just the part you want, using the play/pause button to preview the selection
+4. Open **Settings** (⌘,) to choose a model, language, read aloud engine/voice, and other options
+5. Click **Transcribe**
+6. Edit the transcript if needed
+7. Use **▶ Read Aloud** to listen, **Translate to English** to translate, or export via the toolbar
 
 ## Keyboard shortcuts
 
