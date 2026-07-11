@@ -51,7 +51,7 @@ TXT · Markdown · DOCX (Word) · SRT (subtitles) · PDF
 
 ## Requirements
 
-To use the packaged app (DMG), just macOS 11+ — ffmpeg ships bundled, and yt-dlp is downloaded automatically on first YouTube use and kept up to date, so neither needs a separate install.
+To use the packaged app (DMG), just macOS 11+ on Apple Silicon — ffmpeg ships bundled, and yt-dlp is downloaded automatically on first YouTube use and kept up to date, so neither needs a separate install. (whisper-cli is compiled on the build machine, so Intel Macs would need their own from-source build.)
 
 To build from source:
 - macOS 11+
@@ -74,7 +74,6 @@ npm start
 npm run build
 # Compiles whisper-cli then packages the app
 # Output: dist/Transcriber-<version>-arm64.dmg  (Apple Silicon)
-#         dist/Transcriber-<version>.dmg          (Intel)
 ```
 
 ## Usage
