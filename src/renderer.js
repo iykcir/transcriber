@@ -16,6 +16,14 @@ const transcriptEl      = document.getElementById('transcript');
 const charCount         = document.getElementById('char-count');
 const transcribeBtnArea = document.getElementById('transcribe-btn-area');
 const transcribeBtn     = document.getElementById('transcribe-btn');
+const waveformSection   = document.getElementById('waveform-section');
+const waveformCanvas    = document.getElementById('waveform-canvas');
+const waveformSelection = document.getElementById('waveform-selection');
+const handleStart       = document.getElementById('handle-start');
+const handleEnd         = document.getElementById('handle-end');
+const trimStartLabel    = document.getElementById('trim-start-label');
+const trimEndLabel      = document.getElementById('trim-end-label');
+const trimDurationLabel = document.getElementById('trim-duration-label');
 const progressBarWrap   = document.getElementById('progress-bar-wrap');
 const progressFill      = document.getElementById('progress-fill');
 const progressLabel     = document.getElementById('progress-label');
@@ -128,6 +136,7 @@ function startRecordingWithStream(stream, label) {
   inputOptions.classList.add('hidden');
   transcribeBtnArea.classList.remove('visible');
   statusArea.classList.remove('visible');
+  hideWaveform();
 
   document.getElementById('stop-record-btn').addEventListener('click',   (e) => { e.stopPropagation(); stopRecording();   });
   document.getElementById('cancel-record-btn').addEventListener('click', (e) => { e.stopPropagation(); cancelRecording(); });
@@ -200,6 +209,7 @@ async function loadUrl(url) {
   statusArea.classList.remove('visible');
   transcriptSection.classList.remove('visible');
   setExportEnabled(false);
+  hideWaveform();
   btnTranslate.style.display = 'none';
   readAloudControls.style.display = 'none';
   stopReadAloud();
@@ -280,7 +290,99 @@ async function handleFile(filePath) {
   stopReadAloud();
   transcriptEl.value = '';
   updateCharCount();
+
+  loadWaveform(filePath);
 }
+
+// ── Waveform Trim ─────────────────────────────────────────────────────────────
+let waveformPeaks = null;
+let mediaDuration = 0;
+let trimStart     = 0;
+let trimEnd       = 0;
+
+function formatTime(sec) {
+  sec = Math.max(0, Math.round(sec));
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+}
+
+function hideWaveform() {
+  waveformSection.classList.remove('visible');
+  waveformPeaks = null;
+  mediaDuration = 0;
+}
+
+// Best-effort preview: local files only, and silently skipped if ffmpeg
+// can't decode the format (transcription still runs on the full file).
+async function loadWaveform(filePath) {
+  hideWaveform();
+  try {
+    const { peaks, duration } = await api.getWaveformPeaks(filePath);
+    if (!duration) return;
+    waveformPeaks = peaks;
+    mediaDuration = duration;
+    trimStart = 0;
+    trimEnd   = duration;
+    waveformSection.classList.add('visible');
+    drawWaveform();
+    updateHandles();
+  } catch {}
+}
+
+function drawWaveform() {
+  if (!waveformPeaks) return;
+  const dpr  = window.devicePixelRatio || 1;
+  const rect = waveformCanvas.getBoundingClientRect();
+  waveformCanvas.width  = rect.width * dpr;
+  waveformCanvas.height = rect.height * dpr;
+  const ctx = waveformCanvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, rect.width, rect.height);
+  const midY = rect.height / 2;
+  const barWidth = rect.width / waveformPeaks.length;
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-secondary').trim() || '#888';
+  waveformPeaks.forEach((p, i) => {
+    const h = Math.max(1, p * midY);
+    ctx.fillRect(i * barWidth, midY - h, Math.max(1, barWidth - 1), h * 2);
+  });
+}
+
+function updateHandles() {
+  if (!mediaDuration) return;
+  const startPct = (trimStart / mediaDuration) * 100;
+  const endPct   = (trimEnd   / mediaDuration) * 100;
+  handleStart.style.left        = `${startPct}%`;
+  handleEnd.style.left          = `${endPct}%`;
+  waveformSelection.style.left  = `${startPct}%`;
+  waveformSelection.style.right = `${100 - endPct}%`;
+  trimStartLabel.textContent    = formatTime(trimStart);
+  trimEndLabel.textContent      = formatTime(trimEnd);
+  trimDurationLabel.textContent = `${formatTime(trimEnd - trimStart)} selected`;
+}
+
+function setupHandleDrag(handle, which) {
+  handle.addEventListener('mousedown', (e) => {
+    e.preventDefault();
+    const onMove = (ev) => {
+      const rect = waveformCanvas.getBoundingClientRect();
+      const pct  = Math.min(1, Math.max(0, (ev.clientX - rect.left) / rect.width));
+      const t    = pct * mediaDuration;
+      if (which === 'start') trimStart = Math.max(0, Math.min(t, trimEnd - 0.1));
+      else                   trimEnd   = Math.min(mediaDuration, Math.max(t, trimStart + 0.1));
+      updateHandles();
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  });
+}
+
+setupHandleDrag(handleStart, 'start');
+setupHandleDrag(handleEnd, 'end');
+
+window.addEventListener('resize', () => { if (waveformPeaks) drawWaveform(); });
 
 // ── Transcription ─────────────────────────────────────────────────────────────
 transcribeBtn.addEventListener('click', () => startTranscription(false));
@@ -298,7 +400,8 @@ async function startTranscription() {
   setExportEnabled(false);
 
   try {
-    const text = await api.transcribe(currentFilePath);
+    const hasTrim = waveformPeaks && (trimStart > 0.05 || trimEnd < mediaDuration - 0.05);
+    const text = await api.transcribe(currentFilePath, hasTrim ? trimStart : null, hasTrim ? trimEnd : null);
     transcriptEl.value = text;
     updateCharCount();
     showStatus('ok', 'Transcription complete!');

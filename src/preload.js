@@ -3,7 +3,8 @@ const { contextBridge, ipcRenderer, webUtils } = require('electron');
 contextBridge.exposeInMainWorld('api', {
   getSettings: () => ipcRenderer.invoke('get-settings'),
   setSettings: (settings) => ipcRenderer.invoke('set-settings', settings),
-  transcribe: (filePath) => ipcRenderer.invoke('transcribe', filePath),
+  transcribe: (filePath, startSec, endSec) => ipcRenderer.invoke('transcribe', filePath, startSec, endSec),
+  getWaveformPeaks: (filePath) => ipcRenderer.invoke('get-waveform-peaks', filePath),
   savePDF:  (data) => ipcRenderer.invoke('save-pdf',  data),
   saveTXT:  (data) => ipcRenderer.invoke('save-txt',  data),
   saveDOCX: (data) => ipcRenderer.invoke('save-docx', data),

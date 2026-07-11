@@ -154,7 +154,7 @@ ipcMain.handle('set-settings', (_, settings) => {
   writeConfig(settings);
 });
 
-ipcMain.handle('transcribe', async (_, filePath) => {
+ipcMain.handle('transcribe', async (_, filePath, startSec, endSec) => {
   const { transcribeAudio } = require('./transcribe');
   const config = readConfig();
   const language  = config.language  || 'auto';
@@ -164,7 +164,13 @@ ipcMain.handle('transcribe', async (_, filePath) => {
   return transcribeAudio(filePath, language, timestamps, model, translate,
     (pct) => mainWindow?.webContents.send('transcription-progress', pct),
     (pct) => mainWindow?.webContents.send('model-download-progress', pct),
+    startSec ?? null, endSec ?? null,
   );
+});
+
+ipcMain.handle('get-waveform-peaks', async (_, filePath) => {
+  const { getWaveformPeaks } = require('./transcribe');
+  return getWaveformPeaks(filePath);
 });
 
 ipcMain.handle('save-pdf', async (_, { transcript, filename }) => {

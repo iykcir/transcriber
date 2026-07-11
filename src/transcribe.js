@@ -166,18 +166,25 @@ function downloadYouTube(url, outPath) {
 }
 
 // Convert any local file or URL to 16 kHz mono WAV required by whisper-cli.
-function convertToWav(inputPath) {
+// startSec/endSec optionally trim the input to that range (local files only).
+function convertToWav(inputPath, startSec, endSec) {
   const outPath = path.join(os.tmpdir(), `whisper-${Date.now()}.wav`);
 
   if (YOUTUBE_RE.test(inputPath)) {
     return downloadYouTube(inputPath, outPath);
   }
 
+  const args = ['-nostats', '-loglevel', 'error', '-y', '-i', inputPath];
+  // -ss/-t placed after -i for accurate (decode-based) seeking rather than
+  // fast keyframe seeking, since users are trimming a precise selection.
+  if (startSec != null) args.push('-ss', String(startSec));
+  if (endSec != null) args.push('-t', String(endSec - (startSec || 0)));
+  args.push('-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', outPath);
+
   return new Promise((resolve, reject) => {
     execFile(
       getFfmpegPath(),
-      ['-nostats', '-loglevel', 'error', '-y', '-i', inputPath,
-       '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', outPath],
+      args,
       { env: process.env },
       (err) => {
         if (err) {
@@ -188,6 +195,44 @@ function convertToWav(inputPath) {
         } else resolve(outPath);
       }
     );
+  });
+}
+
+// Decode audio to raw PCM and bucket it into per-bucket peak amplitudes for
+// a waveform preview. Returns { peaks: number[0..1], duration: seconds }.
+function getWaveformPeaks(filePath, bucketCount = 800) {
+  const sampleRate = 8000;
+  const args = ['-nostats', '-loglevel', 'error', '-vn', '-i', filePath,
+    '-ar', String(sampleRate), '-ac', '1', '-f', 's16le', 'pipe:1'];
+
+  return new Promise((resolve, reject) => {
+    const proc = spawn(getFfmpegPath(), args, { env: process.env });
+    const chunks = [];
+    proc.stdout.on('data', (d) => chunks.push(d));
+    proc.on('error', (err) => reject(new Error(`ffmpeg error: ${err.message}`)));
+    proc.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error('Could not read audio for waveform preview.'));
+        return;
+      }
+      const buf = Buffer.concat(chunks);
+      const sampleCount = Math.floor(buf.length / 2);
+      const duration = sampleCount / sampleRate;
+      const buckets = Math.max(1, Math.min(bucketCount, sampleCount));
+      const samplesPerBucket = Math.max(1, Math.floor(sampleCount / buckets));
+      const peaks = new Array(buckets).fill(0);
+      for (let b = 0; b < buckets; b++) {
+        const start = b * samplesPerBucket;
+        const end = Math.min(sampleCount, start + samplesPerBucket);
+        let max = 0;
+        for (let i = start; i < end; i++) {
+          const v = Math.abs(buf.readInt16LE(i * 2));
+          if (v > max) max = v;
+        }
+        peaks[b] = max / 32768;
+      }
+      resolve({ peaks, duration });
+    });
   });
 }
 
@@ -262,7 +307,7 @@ function runWhisper(wavPath, modelPath, language, includeTimestamps, translate, 
   });
 }
 
-async function transcribeAudio(filePath, language, includeTimestamps, model = 'base', translate = false, onProgress = () => {}, onDownload = () => {}) {
+async function transcribeAudio(filePath, language, includeTimestamps, model = 'base', translate = false, onProgress = () => {}, onDownload = () => {}, startSec = null, endSec = null) {
   const modelsDir = getModelsDir();
   const modelFile = MODEL_FILES[model] || MODEL_FILES.base;
   const modelPath = path.join(modelsDir, modelFile);
@@ -286,11 +331,12 @@ async function transcribeAudio(filePath, language, includeTimestamps, model = 'b
   try {
     const isUrl = /^https?:\/\//i.test(filePath);
     const ext = path.extname(filePath).toLowerCase();
-    if (!isUrl && ext === '.wav') {
+    const hasTrim = startSec != null || endSec != null;
+    if (!isUrl && ext === '.wav' && !hasTrim) {
       wavPath = filePath;
     } else {
       onProgress(2);
-      wavPath = await convertToWav(filePath);
+      wavPath = await convertToWav(filePath, startSec, endSec);
       cleanupWav = true;
     }
 
@@ -315,4 +361,4 @@ async function transcribeAudio(filePath, language, includeTimestamps, model = 'b
   }
 }
 
-module.exports = { transcribeAudio, MODELS };
+module.exports = { transcribeAudio, MODELS, getWaveformPeaks };
