@@ -95,9 +95,102 @@ const MODELS = {
 
 const YOUTUBE_RE = /(?:youtube\.com\/(?:watch\?.*v=|shorts\/)|youtu\.be\/)[\w-]{11}/;
 
-function ytdlpAvailable() {
+function systemYtdlpAvailable() {
   try { require('child_process').execFileSync('yt-dlp', ['--version'], { env: process.env }); return true; }
   catch { return false; }
+}
+
+// yt-dlp needs frequent updates to keep working with YouTube's changing
+// extraction requirements, and its own self-update (`yt-dlp -U`) refuses to
+// run for package-manager installs (e.g. Homebrew). So the app manages its
+// own copy in userData and re-checks GitHub for a newer release periodically.
+const YTDLP_RELEASE_ASSET = 'yt-dlp_macos'; // universal (arm64 + x86_64) standalone binary
+const YTDLP_API_URL = 'https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest';
+const YTDLP_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // re-check for updates at most once a day
+
+function getYtdlpDir() { return path.join(app.getPath('userData'), 'bin'); }
+function getYtdlpPath() { return path.join(getYtdlpDir(), 'yt-dlp'); }
+function getYtdlpMetaPath() { return path.join(getYtdlpDir(), 'yt-dlp-meta.json'); }
+
+function readYtdlpMeta() {
+  try { return JSON.parse(fs.readFileSync(getYtdlpMetaPath(), 'utf8')); }
+  catch { return { tag: null, checkedAt: 0 }; }
+}
+
+function fetchJson(urlStr) {
+  return new Promise((resolve, reject) => {
+    https.get(urlStr, { headers: { 'User-Agent': 'transcriber-app' } }, (res) => {
+      if (res.statusCode === 301 || res.statusCode === 302) {
+        res.resume();
+        return resolve(fetchJson(res.headers.location));
+      }
+      if (res.statusCode !== 200) {
+        res.resume();
+        return reject(new Error(`GitHub API request failed: HTTP ${res.statusCode}`));
+      }
+      let data = '';
+      res.on('data', (c) => { data += c; });
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); }
+        catch (e) { reject(e); }
+      });
+    }).on('error', reject);
+  });
+}
+
+function downloadFile(urlStr, destPath) {
+  return new Promise((resolve, reject) => {
+    https.get(urlStr, { headers: { 'User-Agent': 'transcriber-app' } }, (res) => {
+      if (res.statusCode === 301 || res.statusCode === 302) {
+        res.resume();
+        return resolve(downloadFile(res.headers.location, destPath));
+      }
+      if (res.statusCode !== 200) {
+        res.resume();
+        return reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+      }
+      const file = fs.createWriteStream(destPath);
+      res.pipe(file);
+      file.on('finish', () => file.close(() => resolve()));
+      file.on('error', reject);
+    }).on('error', reject);
+  });
+}
+
+// Ensures a working yt-dlp binary is available and reasonably current,
+// downloading (or re-downloading a newer release) as needed. Best-effort:
+// if GitHub can't be reached (e.g. offline on first run), falls back to a
+// system-installed yt-dlp, and ultimately to null so the caller can fall
+// back to ytdl-core.
+async function ensureYtdlp() {
+  const binPath = getYtdlpPath();
+  const meta = readYtdlpMeta();
+  const haveBinary = fs.existsSync(binPath);
+  const staleCheck = Date.now() - (meta.checkedAt || 0) > YTDLP_CHECK_INTERVAL_MS;
+
+  if (!haveBinary || staleCheck) {
+    try {
+      const release = await fetchJson(YTDLP_API_URL);
+      const latestTag = release.tag_name;
+      if (!haveBinary || latestTag !== meta.tag) {
+        const asset = (release.assets || []).find(a => a.name === YTDLP_RELEASE_ASSET);
+        if (asset) {
+          fs.mkdirSync(getYtdlpDir(), { recursive: true });
+          const tmpPath = `${binPath}.download`;
+          await downloadFile(asset.browser_download_url, tmpPath);
+          fs.chmodSync(tmpPath, 0o755);
+          fs.renameSync(tmpPath, binPath);
+        }
+      }
+      fs.writeFileSync(getYtdlpMetaPath(), JSON.stringify({ tag: latestTag, checkedAt: Date.now() }));
+    } catch {
+      // Offline or GitHub unreachable — fall through to whatever we already have.
+    }
+  }
+
+  if (fs.existsSync(binPath)) return binPath;
+  if (systemYtdlpAvailable()) return 'yt-dlp';
+  return null;
 }
 
 // Convert a local (already-downloaded) file to 16 kHz mono WAV, optionally
@@ -134,11 +227,12 @@ function clearYtCache() {
 
 // Try yt-dlp first (reliable), fall back to ytdl-core (best-effort).
 // startSec/endSec optionally trim the result.
-function downloadYouTube(url, outPath, startSec, endSec) {
-  if (ytdlpAvailable()) {
+async function downloadYouTube(url, outPath, startSec, endSec) {
+  const ytdlpPath = await ensureYtdlp();
+  if (ytdlpPath) {
     const rawPath = outPath.replace('.wav', '-raw.%(ext)s');
     return new Promise((resolve, reject) => {
-      execFile('yt-dlp',
+      execFile(ytdlpPath,
         ['-x', '--audio-format', 'best', '-o', rawPath, '--no-playlist', url],
         { env: process.env },
         (err) => {
