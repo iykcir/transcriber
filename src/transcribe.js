@@ -322,6 +322,9 @@ function computePeaksFromLocalFile(filePath, bucketCount) {
       const buf = Buffer.concat(chunks);
       const sampleCount = Math.floor(buf.length / 2);
       const duration = sampleCount / sampleRate;
+      // Int16Array view avoids per-sample readInt16LE() call overhead
+      // (matters for hour-long files: tens of millions of samples).
+      const samples = new Int16Array(buf.buffer, buf.byteOffset, sampleCount);
       const buckets = Math.max(1, Math.min(bucketCount, sampleCount));
       const samplesPerBucket = Math.max(1, Math.floor(sampleCount / buckets));
       const peaks = new Array(buckets).fill(0);
@@ -330,7 +333,7 @@ function computePeaksFromLocalFile(filePath, bucketCount) {
         const end = Math.min(sampleCount, start + samplesPerBucket);
         let max = 0;
         for (let i = start; i < end; i++) {
-          const v = Math.abs(buf.readInt16LE(i * 2));
+          const v = Math.abs(samples[i]);
           if (v > max) max = v;
         }
         peaks[b] = max / 32768;

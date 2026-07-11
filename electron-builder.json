@@ -25,11 +25,12 @@
     "assets/**/*",
     "node_modules/**/*",
     "!node_modules/*/{CHANGELOG.md,README.md,readme.md,changelog.md}",
-    "!node_modules/.cache"
+    "!node_modules/.cache",
+    "!node_modules/nodejs-whisper/**",
+    "node_modules/nodejs-whisper/cpp/whisper.cpp/build/bin/whisper-cli"
   ],
   "asarUnpack": [
     "node_modules/nodejs-whisper/cpp/whisper.cpp/build/bin/whisper-cli",
-    "node_modules/nodejs-whisper/cpp/whisper.cpp/models/**",
     "node_modules/ffmpeg-static/**"
   ],
   "nativeRebuilder": "sequential"

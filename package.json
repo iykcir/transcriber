@@ -10,34 +10,6 @@
     "build": "npm run build:whisper && electron-builder",
     "pack": "npm run build:whisper && electron-builder --dir"
   },
-  "build": {
-    "appId": "com.transcriber.app",
-    "productName": "Transcriber",
-    "mac": {
-      "category": "public.app-category.productivity",
-      "icon": "assets/icon.icns",
-      "target": [
-        {
-          "target": "dmg",
-          "arch": [
-            "arm64",
-            "x64"
-          ]
-        }
-      ]
-    },
-    "dmg": {
-      "title": "Transcriber",
-      "icon": "assets/icon.icns"
-    },
-    "files": [
-      "src/**/*",
-      "assets/**/*",
-      "node_modules/**/*"
-    ],
-    "extraResources": [],
-    "nativeRebuilder": "sequential"
-  },
   "dependencies": {
     "@distube/ytdl-core": "^4.16.12",
     "@vitalets/google-translate-api": "^9.2.1",
@@ -51,7 +23,6 @@
     "canvas": "^3.2.3",
     "electron": "^42.3.0",
     "electron-builder": "^26.8.1",
-    "electron-rebuild": "^1.4.0",
     "eslint": "^10.7.0",
     "globals": "^17.7.0",
     "playwright-core": "^1.60.0"

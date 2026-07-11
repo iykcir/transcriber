@@ -175,7 +175,9 @@ function restoreDropzone() {
 urlLoadBtn.addEventListener('click', () => loadUrl(urlInput.value.trim()));
 urlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadUrl(urlInput.value.trim()); });
 
-function setDropzoneUrl(displayName, meta) {
+// Collapses the dropzone into a compact "loaded file" row (used for both
+// local files and URLs).
+function setDropzoneFile(displayName, meta) {
   dropzone.classList.add('has-file');
   dropzone.innerHTML = `
     <svg class="mic-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -191,6 +193,17 @@ function setDropzoneUrl(displayName, meta) {
   dropzone.onclick = () => fileInput.click();
 }
 
+// Clears transcript/status state when a new input is loaded.
+function resetForNewMedia() {
+  transcribeBtnArea.classList.add('visible');
+  statusArea.classList.remove('visible');
+  transcriptSection.classList.remove('visible');
+  setExportEnabled(false);
+  btnTranslate.style.display = 'none';
+  transcriptEl.value = '';
+  updateCharCount();
+}
+
 async function loadUrl(url) {
   if (!url) return;
   let parsed;
@@ -203,16 +216,10 @@ async function loadUrl(url) {
   const pathFile = parsed.pathname.split('/').filter(Boolean).pop();
   const initialName = (pathFile && pathFile !== 'watch') ? decodeURIComponent(pathFile) : url;
   currentFileName = initialName.replace(/\.[^.]+$/, '') || 'stream';
-  setDropzoneUrl(initialName, parsed.hostname);
+  setDropzoneFile(initialName, parsed.hostname);
 
   urlInput.value = '';
-  transcribeBtnArea.classList.add('visible');
-  statusArea.classList.remove('visible');
-  transcriptSection.classList.remove('visible');
-  setExportEnabled(false);
-  btnTranslate.style.display = 'none';
-  transcriptEl.value = '';
-  updateCharCount();
+  resetForNewMedia();
 
   // Best-effort: downloads (YouTube) or streams (direct links) the audio via
   // ffmpeg to build a waveform preview. May take a while for YouTube.
@@ -225,7 +232,7 @@ async function loadUrl(url) {
       if (res.ok) {
         const data = await res.json();
         currentFileName = data.title;
-        setDropzoneUrl(data.title, `YouTube · ${data.author_name}`);
+        setDropzoneFile(data.title, `YouTube · ${data.author_name}`);
       }
     } catch {}
   }
@@ -267,29 +274,8 @@ async function handleFile(filePath) {
   currentFilePath = filePath;
   currentFileName = info.name.replace(/\.[^.]+$/, '');
 
-  dropzone.classList.add('has-file');
-  dropzone.innerHTML = `
-    <svg class="mic-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-      <line x1="12" y1="19" x2="12" y2="23"/>
-      <line x1="8" y1="23" x2="16" y2="23"/>
-    </svg>
-    <div class="file-info">
-      <div class="file-name">${info.name}</div>
-      <div class="file-meta">${info.ext.toUpperCase()} · ${sizeMB} MB · Click to change</div>
-    </div>
-  `;
-
-  dropzone.onclick = () => fileInput.click();
-
-  transcribeBtnArea.classList.add('visible');
-  statusArea.classList.remove('visible');
-  transcriptSection.classList.remove('visible');
-  setExportEnabled(false);
-  btnTranslate.style.display = 'none';
-  transcriptEl.value = '';
-  updateCharCount();
+  setDropzoneFile(info.name, `${info.ext.toUpperCase()} · ${sizeMB} MB`);
+  resetForNewMedia();
 
   loadWaveform(filePath);
 }
@@ -472,7 +458,7 @@ for (const el of [previewAudio, previewVideo]) {
 }
 
 // ── Transcription ─────────────────────────────────────────────────────────────
-transcribeBtn.addEventListener('click', () => startTranscription(false));
+transcribeBtn.addEventListener('click', () => startTranscription());
 btnTranslate.addEventListener('click', translateTranscript);
 
 async function startTranscription() {
@@ -633,7 +619,6 @@ settingsSave.addEventListener('click', async () => {
 // ── IPC from main ─────────────────────────────────────────────────────────────
 api.onFileSelected((filePath) => handleFile(filePath));
 api.onOpenSettings(() => openSettings());
-api.onThemeChanged(() => {});
 api.onTranscriptionProgress((pct) => setProgress(pct));
 api.onModelDownloadProgress((pct) => {
   showStatus('progress', 'Downloading model…');

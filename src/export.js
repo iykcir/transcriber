@@ -6,6 +6,7 @@ async function exportPDF(transcript, title, outputPath) {
     const doc = new PDFDocument({
       size: 'LETTER',
       margins: { top: 72, bottom: 72, left: 72, right: 72 },
+      bufferPages: true, // keep all pages addressable for the page-number pass
     });
 
     const stream = fs.createWriteStream(outputPath);

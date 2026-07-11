@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, shell, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -172,29 +172,34 @@ ipcMain.handle('get-waveform-peaks', async (_, filePath) => {
   return getWaveformPeaks(filePath);
 });
 
-ipcMain.handle('save-pdf', async (_, { transcript, filename }) => {
-  const { exportPDF } = require('./export');
-  const result = await dialog.showSaveDialog(mainWindow, {
-    title: 'Save Transcript as PDF',
-    defaultPath: `${filename}.pdf`,
-    filters: [{ name: 'PDF', extensions: ['pdf'] }],
-  });
-  if (result.canceled) return null;
-  await exportPDF(transcript, filename, result.filePath);
-  return result.filePath;
-});
+// Each export format shares the same flow: prompt for a destination, then
+// write. `write` gets (transcript, filename, outPath); ./export is required
+// lazily so pdfkit/docx don't load at app startup.
+const EXPORT_FORMATS = {
+  'save-txt':  { title: 'Text', name: 'Text File', ext: 'txt',
+    write: (t, _f, out) => fs.writeFileSync(out, t, 'utf8') },
+  'save-md':   { title: 'Markdown', name: 'Markdown', ext: 'md',
+    write: (t, f, out) => fs.writeFileSync(out, require('./export').exportMarkdown(t, f), 'utf8') },
+  'save-srt':  { title: 'Subtitles', name: 'SubRip Subtitle', ext: 'srt',
+    write: (t, _f, out) => fs.writeFileSync(out, require('./export').exportSRT(t), 'utf8') },
+  'save-docx': { title: 'Word Document', name: 'Word Document', ext: 'docx',
+    write: (t, f, out) => require('./export').exportDOCX(t, f, out) },
+  'save-pdf':  { title: 'PDF', name: 'PDF', ext: 'pdf',
+    write: (t, f, out) => require('./export').exportPDF(t, f, out) },
+};
 
-ipcMain.handle('save-txt', async (_, { transcript, filename }) => {
-  const result = await dialog.showSaveDialog(mainWindow, {
-    title: 'Save Transcript as Text',
-    defaultPath: `${filename}.txt`,
-    filters: [{ name: 'Text File', extensions: ['txt'] }],
+for (const [channel, fmt] of Object.entries(EXPORT_FORMATS)) {
+  ipcMain.handle(channel, async (_, { transcript, filename }) => {
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: `Save Transcript as ${fmt.title}`,
+      defaultPath: `${filename}.${fmt.ext}`,
+      filters: [{ name: fmt.name, extensions: [fmt.ext] }],
+    });
+    if (result.canceled) return null;
+    await fmt.write(transcript, filename, result.filePath);
+    return result.filePath;
   });
-  if (result.canceled) return null;
-  fs.writeFileSync(result.filePath, transcript, 'utf8');
-  return result.filePath;
-});
-
+}
 
 ipcMain.handle('translate-text', async (_, text) => {
   const { translate } = require('@vitalets/google-translate-api');
@@ -206,50 +211,10 @@ ipcMain.handle('translate-text', async (_, text) => {
   return results.map(r => r.text).join('');
 });
 
-ipcMain.handle('save-docx', async (_, { transcript, filename }) => {
-  const { exportDOCX } = require('./export');
-  const result = await dialog.showSaveDialog(mainWindow, {
-    title: 'Save Transcript as Word Document',
-    defaultPath: `${filename}.docx`,
-    filters: [{ name: 'Word Document', extensions: ['docx'] }],
-  });
-  if (result.canceled) return null;
-  await exportDOCX(transcript, filename, result.filePath);
-  return result.filePath;
-});
-
-ipcMain.handle('save-srt', async (_, { transcript, filename }) => {
-  const { exportSRT } = require('./export');
-  const result = await dialog.showSaveDialog(mainWindow, {
-    title: 'Save Transcript as Subtitles',
-    defaultPath: `${filename}.srt`,
-    filters: [{ name: 'SubRip Subtitle', extensions: ['srt'] }],
-  });
-  if (result.canceled) return null;
-  fs.writeFileSync(result.filePath, exportSRT(transcript), 'utf8');
-  return result.filePath;
-});
-
-ipcMain.handle('save-md', async (_, { transcript, filename }) => {
-  const { exportMarkdown } = require('./export');
-  const result = await dialog.showSaveDialog(mainWindow, {
-    title: 'Save Transcript as Markdown',
-    defaultPath: `${filename}.md`,
-    filters: [{ name: 'Markdown', extensions: ['md'] }],
-  });
-  if (result.canceled) return null;
-  fs.writeFileSync(result.filePath, exportMarkdown(transcript, filename), 'utf8');
-  return result.filePath;
-});
-
 ipcMain.handle('save-recording', (_, buffer) => {
   const tmpPath = path.join(os.tmpdir(), `recording-${Date.now()}.webm`);
   fs.writeFileSync(tmpPath, Buffer.from(buffer));
   return tmpPath;
-});
-
-ipcMain.handle('show-in-finder', (_, filePath) => {
-  shell.showItemInFolder(filePath);
 });
 
 ipcMain.handle('get-file-info', async (_, filePath) => {
@@ -260,8 +225,6 @@ ipcMain.handle('get-file-info', async (_, filePath) => {
     ext: path.extname(filePath).slice(1),
   };
 });
-
-ipcMain.handle('get-theme', () => nativeTheme.shouldUseDarkColors ? 'dark' : 'light');
 
 app.whenReady().then(() => {
   buildMenu();
@@ -274,8 +237,4 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
-});
-
-nativeTheme.on('updated', () => {
-  mainWindow?.webContents.send('theme-changed', nativeTheme.shouldUseDarkColors ? 'dark' : 'light');
 });
