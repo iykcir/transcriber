@@ -607,11 +607,18 @@
     #waveform-wrap {
       position: relative;
       height: 64px;
+      -webkit-app-region: no-drag;
+    }
+
+    /* Visual clipping (rounded corners) lives on this inner layer so it
+       doesn't also clip the drag handles' hit area at the 0%/100% edges. */
+    #waveform-clip {
+      position: absolute;
+      inset: 0;
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: 10px;
       overflow: hidden;
-      -webkit-app-region: no-drag;
     }
 
     #waveform-canvas {
@@ -710,8 +717,10 @@
     <!-- Waveform trim -->
     <div id="waveform-section">
       <div id="waveform-wrap">
-        <canvas id="waveform-canvas"></canvas>
-        <div id="waveform-selection"></div>
+        <div id="waveform-clip">
+          <canvas id="waveform-canvas"></canvas>
+          <div id="waveform-selection"></div>
+        </div>
         <div class="waveform-handle" id="handle-start"></div>
         <div class="waveform-handle" id="handle-end"></div>
       </div>
@@ -850,6 +859,7 @@
 <div id="toast"></div>
 
 <input type="file" id="file-input" accept=".mp3,.mp4,.m4a,.wav,.ogg,.webm,.flac,.mov,.mkv,.avi,.m4v,.wmv,.3gp,.ts" style="display:none" />
+<audio id="preview-audio" style="display:none"></audio>
 
 <script src="renderer.js"></script>
 </body>

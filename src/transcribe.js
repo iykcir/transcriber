@@ -100,8 +100,41 @@ function ytdlpAvailable() {
   catch { return false; }
 }
 
+// Convert a local (already-downloaded) file to 16 kHz mono WAV, optionally
+// trimmed to [startSec, endSec]. -ss/-t are placed after -i for accurate
+// (decode-based) seeking rather than fast keyframe seeking, since users are
+// trimming a precise selection.
+function ffmpegToWav(inputPath, outPath, startSec, endSec) {
+  const args = ['-nostats', '-loglevel', 'error', '-y', '-i', inputPath];
+  if (startSec != null) args.push('-ss', String(startSec));
+  if (endSec != null) args.push('-t', String(endSec - (startSec || 0)));
+  args.push('-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', outPath);
+
+  return new Promise((resolve, reject) => {
+    execFile(getFfmpegPath(), args, { env: process.env }, (err) => {
+      if (err) {
+        const isUrl = /^https?:\/\//i.test(inputPath);
+        reject(new Error(isUrl
+          ? 'Could not load URL. Check the link is accessible and points to audio or video.'
+          : 'Audio conversion failed. The file may be corrupted or in an unsupported format.'));
+      } else resolve(outPath);
+    });
+  });
+}
+
+// Caches the last downloaded YouTube audio (keyed by URL) so a waveform
+// preview and the subsequent transcription of the same URL don't each
+// trigger their own full yt-dlp download.
+let ytCache = null;
+
+function clearYtCache() {
+  if (ytCache) fs.unlink(ytCache.wavPath, () => {});
+  ytCache = null;
+}
+
 // Try yt-dlp first (reliable), fall back to ytdl-core (best-effort).
-function downloadYouTube(url, outPath) {
+// startSec/endSec optionally trim the result.
+function downloadYouTube(url, outPath, startSec, endSec) {
   if (ytdlpAvailable()) {
     const rawPath = outPath.replace('.wav', '-raw.%(ext)s');
     return new Promise((resolve, reject) => {
@@ -115,16 +148,9 @@ function downloadYouTube(url, outPath) {
             .map(f => path.join(os.tmpdir(), f))
             .find(f => f.startsWith(base));
           if (!found) return reject(new Error('yt-dlp download succeeded but output file not found.'));
-          execFile(getFfmpegPath(),
-            ['-nostats', '-loglevel', 'error', '-y', '-i', found,
-             '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', outPath],
-            { env: process.env },
-            (err2) => {
-              fs.unlink(found, () => {});
-              if (err2) reject(new Error('Audio conversion failed after yt-dlp download.'));
-              else resolve(outPath);
-            }
-          );
+          ffmpegToWav(found, outPath, startSec, endSec)
+            .then((p) => { fs.unlink(found, () => {}); resolve(p); })
+            .catch((e) => { fs.unlink(found, () => {}); reject(new Error('Audio conversion failed after yt-dlp download.', { cause: e })); });
         }
       );
     });
@@ -143,11 +169,11 @@ function downloadYouTube(url, outPath) {
       ));
     }
 
-    const ffmpeg = spawn(getFfmpegPath(),
-      ['-nostats', '-loglevel', 'error', '-y', '-i', 'pipe:0',
-       '-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', outPath],
-      { env: process.env }
-    );
+    const args = ['-nostats', '-loglevel', 'error', '-y', '-i', 'pipe:0'];
+    if (startSec != null) args.push('-ss', String(startSec));
+    if (endSec != null) args.push('-t', String(endSec - (startSec || 0)));
+    args.push('-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', outPath);
+    const ffmpeg = spawn(getFfmpegPath(), args, { env: process.env });
 
     ytStream.on('error', (e) => {
       ffmpeg.kill();
@@ -166,41 +192,25 @@ function downloadYouTube(url, outPath) {
 }
 
 // Convert any local file or URL to 16 kHz mono WAV required by whisper-cli.
-// startSec/endSec optionally trim the input to that range (local files only).
+// startSec/endSec optionally trim the input to that range. For YouTube URLs,
+// reuses the cached download from a prior getWaveformPeaks() call when
+// available instead of re-downloading.
 function convertToWav(inputPath, startSec, endSec) {
   const outPath = path.join(os.tmpdir(), `whisper-${Date.now()}.wav`);
 
   if (YOUTUBE_RE.test(inputPath)) {
-    return downloadYouTube(inputPath, outPath);
+    if (ytCache && ytCache.url === inputPath && fs.existsSync(ytCache.wavPath)) {
+      return ffmpegToWav(ytCache.wavPath, outPath, startSec, endSec);
+    }
+    return downloadYouTube(inputPath, outPath, startSec, endSec);
   }
 
-  const args = ['-nostats', '-loglevel', 'error', '-y', '-i', inputPath];
-  // -ss/-t placed after -i for accurate (decode-based) seeking rather than
-  // fast keyframe seeking, since users are trimming a precise selection.
-  if (startSec != null) args.push('-ss', String(startSec));
-  if (endSec != null) args.push('-t', String(endSec - (startSec || 0)));
-  args.push('-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', outPath);
-
-  return new Promise((resolve, reject) => {
-    execFile(
-      getFfmpegPath(),
-      args,
-      { env: process.env },
-      (err) => {
-        if (err) {
-          const isUrl = /^https?:\/\//i.test(inputPath);
-          reject(new Error(isUrl
-            ? 'Could not load URL. Check the link is accessible and points to audio or video.'
-            : 'Audio conversion failed. The file may be corrupted or in an unsupported format.'));
-        } else resolve(outPath);
-      }
-    );
-  });
+  return ffmpegToWav(inputPath, outPath, startSec, endSec);
 }
 
 // Decode audio to raw PCM and bucket it into per-bucket peak amplitudes for
 // a waveform preview. Returns { peaks: number[0..1], duration: seconds }.
-function getWaveformPeaks(filePath, bucketCount = 800) {
+function computePeaksFromLocalFile(filePath, bucketCount) {
   const sampleRate = 8000;
   const args = ['-nostats', '-loglevel', 'error', '-vn', '-i', filePath,
     '-ar', String(sampleRate), '-ac', '1', '-f', 's16le', 'pipe:1'];
@@ -234,6 +244,26 @@ function getWaveformPeaks(filePath, bucketCount = 800) {
       resolve({ peaks, duration });
     });
   });
+}
+
+// filePath may be a local file, a direct http(s) media URL (ffmpeg can
+// stream those directly), or a YouTube URL (downloaded once and cached so
+// a later transcribe of the same URL reuses it instead of re-downloading).
+// previewPath in the result is always a local file, suitable for playback
+// in an <audio>/<video> element (e.g. for scrub preview while trimming).
+async function getWaveformPeaks(filePath, bucketCount = 800) {
+  if (YOUTUBE_RE.test(filePath)) {
+    if (!ytCache || ytCache.url !== filePath) {
+      clearYtCache();
+      const wavPath = path.join(os.tmpdir(), `whisper-yt-preview-${Date.now()}.wav`);
+      await downloadYouTube(filePath, wavPath);
+      ytCache = { url: filePath, wavPath };
+    }
+    const { peaks, duration } = await computePeaksFromLocalFile(ytCache.wavPath, bucketCount);
+    return { peaks, duration, previewPath: ytCache.wavPath };
+  }
+  const { peaks, duration } = await computePeaksFromLocalFile(filePath, bucketCount);
+  return { peaks, duration, previewPath: filePath };
 }
 
 // Run whisper-cli, streaming stderr for progress events.

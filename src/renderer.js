@@ -24,6 +24,7 @@ const handleEnd         = document.getElementById('handle-end');
 const trimStartLabel    = document.getElementById('trim-start-label');
 const trimEndLabel      = document.getElementById('trim-end-label');
 const trimDurationLabel = document.getElementById('trim-duration-label');
+const previewAudio      = document.getElementById('preview-audio');
 const progressBarWrap   = document.getElementById('progress-bar-wrap');
 const progressFill      = document.getElementById('progress-fill');
 const progressLabel     = document.getElementById('progress-label');
@@ -209,12 +210,15 @@ async function loadUrl(url) {
   statusArea.classList.remove('visible');
   transcriptSection.classList.remove('visible');
   setExportEnabled(false);
-  hideWaveform();
   btnTranslate.style.display = 'none';
   readAloudControls.style.display = 'none';
   stopReadAloud();
   transcriptEl.value = '';
   updateCharCount();
+
+  // Best-effort: downloads (YouTube) or streams (direct links) the audio via
+  // ffmpeg to build a waveform preview. May take a while for YouTube.
+  loadWaveform(url);
 
   // For YouTube, fetch the real title via the public oEmbed API
   if (isYouTube) {
@@ -309,14 +313,16 @@ function hideWaveform() {
   waveformSection.classList.remove('visible');
   waveformPeaks = null;
   mediaDuration = 0;
+  previewAudio.pause();
+  previewAudio.removeAttribute('src');
 }
 
-// Best-effort preview: local files only, and silently skipped if ffmpeg
-// can't decode the format (transcription still runs on the full file).
+// Best-effort preview: silently skipped if ffmpeg can't decode the format
+// (transcription still runs on the full file/URL either way).
 async function loadWaveform(filePath) {
   hideWaveform();
   try {
-    const { peaks, duration } = await api.getWaveformPeaks(filePath);
+    const { peaks, duration, previewPath } = await api.getWaveformPeaks(filePath);
     if (!duration) return;
     waveformPeaks = peaks;
     mediaDuration = duration;
@@ -325,7 +331,29 @@ async function loadWaveform(filePath) {
     waveformSection.classList.add('visible');
     drawWaveform();
     updateHandles();
+
+    if (previewPath) {
+      previewAudio.src = /^https?:\/\//i.test(previewPath) ? previewPath : api.toFileUrl(previewPath);
+    }
   } catch {}
+}
+
+// Plays a brief snippet at time `t` so dragging a handle previews where it
+// lands, like scrubbing in a video editor.
+let scrubPauseTimer = null;
+function scrubPreview(t) {
+  if (!previewAudio.src) return;
+  clearTimeout(scrubPauseTimer);
+  try {
+    previewAudio.currentTime = t;
+    previewAudio.play().catch(() => {});
+  } catch {}
+  scrubPauseTimer = setTimeout(() => previewAudio.pause(), 200);
+}
+
+function stopScrubPreview() {
+  clearTimeout(scrubPauseTimer);
+  previewAudio.pause();
 }
 
 function drawWaveform() {
@@ -369,10 +397,12 @@ function setupHandleDrag(handle, which) {
       if (which === 'start') trimStart = Math.max(0, Math.min(t, trimEnd - 0.1));
       else                   trimEnd   = Math.min(mediaDuration, Math.max(t, trimStart + 0.1));
       updateHandles();
+      scrubPreview(which === 'start' ? trimStart : trimEnd);
     };
     const onUp = () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
+      stopScrubPreview();
     };
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
