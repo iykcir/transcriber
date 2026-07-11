@@ -25,6 +25,7 @@ const trimStartLabel    = document.getElementById('trim-start-label');
 const trimEndLabel      = document.getElementById('trim-end-label');
 const trimDurationLabel = document.getElementById('trim-duration-label');
 const previewAudio      = document.getElementById('preview-audio');
+const previewVideo      = document.getElementById('preview-video');
 const waveformPlayBtn   = document.getElementById('waveform-play-btn');
 const waveformPlayIcon  = document.getElementById('waveform-play-icon');
 const waveformPauseIcon = document.getElementById('waveform-pause-icon');
@@ -312,12 +313,28 @@ function formatTime(sec) {
   return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 }
 
+// Video files get a visible <video> preview instead of the hidden <audio>
+// element, so trimming shows the picture, not just the waveform.
+const VIDEO_EXT_RE = /\.(mp4|mov|mkv|avi|m4v|wmv|3gp|ts)(\?|$)/i;
+function isVideoFile(path) {
+  return VIDEO_EXT_RE.test(path || '');
+}
+
+// The element actually driving playback right now — whichever of the two
+// preview elements has a loaded source.
+function activePreviewEl() {
+  return previewVideo.classList.contains('visible') ? previewVideo : previewAudio;
+}
+
 function hideWaveform() {
   waveformSection.classList.remove('visible');
   waveformPeaks = null;
   mediaDuration = 0;
   previewAudio.pause();
   previewAudio.removeAttribute('src');
+  previewVideo.pause();
+  previewVideo.removeAttribute('src');
+  previewVideo.classList.remove('visible');
   waveformPlayBtn.disabled = true;
 }
 
@@ -337,7 +354,13 @@ async function loadWaveform(filePath) {
     updateHandles();
 
     if (previewPath) {
-      previewAudio.src = /^https?:\/\//i.test(previewPath) ? previewPath : api.toFileUrl(previewPath);
+      const src = /^https?:\/\//i.test(previewPath) ? previewPath : api.toFileUrl(previewPath);
+      if (isVideoFile(filePath)) {
+        previewVideo.src = src;
+        previewVideo.classList.add('visible');
+      } else {
+        previewAudio.src = src;
+      }
       waveformPlayBtn.disabled = false;
     }
   } catch {}
@@ -347,18 +370,19 @@ async function loadWaveform(filePath) {
 // lands, like scrubbing in a video editor.
 let scrubPauseTimer = null;
 function scrubPreview(t) {
-  if (!previewAudio.src) return;
+  const el = activePreviewEl();
+  if (!el.src) return;
   clearTimeout(scrubPauseTimer);
   try {
-    previewAudio.currentTime = t;
-    previewAudio.play().catch(() => {});
+    el.currentTime = t;
+    el.play().catch(() => {});
   } catch {}
-  scrubPauseTimer = setTimeout(() => previewAudio.pause(), 200);
+  scrubPauseTimer = setTimeout(() => el.pause(), 200);
 }
 
 function stopScrubPreview() {
   clearTimeout(scrubPauseTimer);
-  previewAudio.pause();
+  activePreviewEl().pause();
 }
 
 function drawWaveform() {
@@ -423,30 +447,37 @@ window.addEventListener('resize', () => { if (waveformPeaks) drawWaveform(); });
 // Plays the current trim selection in full (as opposed to scrubPreview's brief
 // snippet while dragging a handle), stopping automatically at the selection end.
 waveformPlayBtn.addEventListener('click', () => {
-  if (!previewAudio.src) return;
-  if (previewAudio.paused) {
-    if (previewAudio.currentTime < trimStart || previewAudio.currentTime >= trimEnd) {
-      previewAudio.currentTime = trimStart;
+  const el = activePreviewEl();
+  if (!el.src) return;
+  if (el.paused) {
+    if (el.currentTime < trimStart || el.currentTime >= trimEnd) {
+      el.currentTime = trimStart;
     }
-    previewAudio.play().catch(() => {});
+    el.play().catch(() => {});
   } else {
-    previewAudio.pause();
+    el.pause();
   }
 });
 
-previewAudio.addEventListener('play', () => {
+function onPreviewPlay() {
   waveformPlayIcon.style.display = 'none';
   waveformPauseIcon.style.display = '';
-});
+}
 
-previewAudio.addEventListener('pause', () => {
+function onPreviewPause() {
   waveformPlayIcon.style.display = '';
   waveformPauseIcon.style.display = 'none';
-});
+}
 
-previewAudio.addEventListener('timeupdate', () => {
-  if (previewAudio.currentTime >= trimEnd) previewAudio.pause();
-});
+function onPreviewTimeUpdate(e) {
+  if (e.target.currentTime >= trimEnd) e.target.pause();
+}
+
+for (const el of [previewAudio, previewVideo]) {
+  el.addEventListener('play', onPreviewPlay);
+  el.addEventListener('pause', onPreviewPause);
+  el.addEventListener('timeupdate', onPreviewTimeUpdate);
+}
 
 // ── Transcription ─────────────────────────────────────────────────────────────
 transcribeBtn.addEventListener('click', () => startTranscription(false));
