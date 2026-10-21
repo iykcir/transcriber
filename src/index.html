@@ -601,6 +601,17 @@
     body[data-state="transcribing"] .picker,
     body[data-state="transcribing"] .hint { pointer-events: none; opacity: 0.5; }
 
+    /* Explains the spelling-hints field, only while it's being typed in. */
+    #hint-help {
+      display: none;
+      font-size: 11px;
+      color: var(--text-secondary);
+      padding-left: 2px;
+      margin-top: -4px;
+      flex-shrink: 0;
+    }
+    body[data-state="loaded"]:has(#hint-input:focus) #hint-help { display: block; }
+
     #transcribe-btn { min-width: 150px; }
     #transcribe-fill {
       position: absolute;
@@ -883,8 +894,7 @@
         <option value="hi">Hindi</option>
       </select>
       <input class="hint" id="hint-input" type="text" maxlength="600" spellcheck="false"
-        placeholder="Names &amp; terms…" aria-label="Vocabulary hint"
-        title="Optional: names and terms to spell correctly, e.g. Kubernetes, Dr. Okonkwo" />
+        placeholder="Spelling hints…" aria-label="Spelling hints" aria-describedby="hint-help" />
       <div class="spacer"></div>
       <button class="btn-ghost" id="cancel-btn">Cancel</button>
       <button class="btn-primary" id="transcribe-btn">
@@ -892,6 +902,7 @@
         <span id="transcribe-label">Transcribe<kbd>⌘↩</kbd></span>
       </button>
     </div>
+    <div id="hint-help">Optional: names or terms to spell exactly, separated by commas — e.g. Okonkwo, Kubernetes, MBS</div>
     <div id="inline-error" role="alert"></div>
     <!-- Transcript -->
     <div id="transcript-section">
@@ -938,7 +949,7 @@
       </label>
     </div>
     <div class="settings-note">
-      Models are downloaded on first use and cached locally. Choose the model, language and any names or terms next to the Transcribe button. Recent transcripts stay on this Mac.
+      Models are downloaded on first use and cached locally. Choose the model, language and any spelling hints next to the Transcribe button. Recent transcripts stay on this Mac.
     </div>
     <div class="settings-footer">
       <button class="btn-ghost" id="settings-cancel">Cancel</button>

@@ -36,9 +36,9 @@ Downloaded automatically on first use and cached in `~/Library/Application Suppo
 | Turbo (large-v3-turbo, quantized) | 574 MB | Most accurate — near large-v3 quality, faster than Medium |
 
 ### Transcription options
-**Model**, **Language** and an optional **Names & terms** hint are chosen right next to the Transcribe button; whatever you pick is remembered for next time. **Timestamps**, **Translate to English**, recent transcripts and the launch-time update check live in Settings (⌘,).
+**Model**, **Language** and optional **Spelling hints** are chosen right next to the Transcribe button; whatever you pick is remembered for next time. **Timestamps**, **Translate to English**, recent transcripts and the launch-time update check live in Settings (⌘,).
 
-- **Names & terms** — list names, jargon or acronyms (e.g. *Kubernetes, Dr. Okonkwo*) and whisper will favour those spellings
+- **Spelling hints** — names, jargon or acronyms whisper should spell exactly, separated by commas (e.g. *Okonkwo, Kubernetes, MBS*); a short explanation appears under the field while you type
 
 - **Language** — auto-detect or choose from 14 languages (English, Spanish, French, German, Italian, Portuguese, Dutch, Polish, Russian, Chinese, Japanese, Korean, Arabic, Hindi)
 - **Timestamps** — include `[HH:MM:SS → HH:MM:SS]` segment markers in the output
