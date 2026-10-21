@@ -235,13 +235,20 @@ async function downloadYouTube(url, outPath, startSec, endSec, signal) {
   const ytdlpPath = await ensureYtdlp();
   if (ytdlpPath) {
     const rawPath = outPath.replace('.wav', '-raw.%(ext)s');
+    const base = rawPath.replace('.%(ext)s', '');
     return new Promise((resolve, reject) => {
       execFile(ytdlpPath,
         ['-x', '--audio-format', 'best', '-o', rawPath, '--no-playlist', url],
         { env: process.env, signal },
         (err) => {
-          if (err) return reject(new Error(`yt-dlp failed: ${err.message}`));
-          const base = rawPath.replace('.%(ext)s', '');
+          if (err) {
+            // A failed or cancelled download leaves partial files (e.g. .part).
+            for (const f of fs.readdirSync(os.tmpdir())) {
+              const full = path.join(os.tmpdir(), f);
+              if (full.startsWith(base)) fs.unlink(full, () => {});
+            }
+            return reject(new Error(`yt-dlp failed: ${err.message}`));
+          }
           const found = fs.readdirSync(os.tmpdir())
             .map(f => path.join(os.tmpdir(), f))
             .find(f => f.startsWith(base));

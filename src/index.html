@@ -255,6 +255,7 @@
     #dropzone .file-info {
       flex: 1;
       min-width: 0;
+      overflow: hidden;
       display: flex;
       align-items: baseline;
       gap: 8px;
@@ -273,7 +274,11 @@
       font-size: 11px;
       color: var(--text-secondary);
       white-space: nowrap;
-      flex-shrink: 0;
+      /* Short metadata stays whole; a long host/author truncates. */
+      flex: 0 1 auto;
+      max-width: 45%;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     #source-change, #source-clear { flex-shrink: 0; }

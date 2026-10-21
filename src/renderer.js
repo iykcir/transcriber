@@ -11,7 +11,7 @@ const titleText         = document.getElementById('title-text');
 const inlineError       = document.getElementById('inline-error');
 const transcribeLabel   = document.getElementById('transcribe-label');
 const transcribeFill    = document.getElementById('transcribe-fill');
-const cancelBtn         = document.getElementById('cancel-btn');
+const cancelBtn         = /** @type {HTMLButtonElement} */ (document.getElementById('cancel-btn'));
 const exportBtn         = document.getElementById('export-btn');
 const exportMenu        = document.getElementById('export-menu');
 const fileInput         = /** @type {HTMLInputElement} */ (document.getElementById('file-input'));
@@ -63,6 +63,9 @@ function showToast(msg, duration = 2500) {
 /** @type {import('./ui-logic').AppState} */
 let appState = 'empty';
 let currentDisplayName = null;
+// Bumped whenever the loaded media changes, so async work started for older
+// media (e.g. a translation) can tell its result is stale.
+let mediaGeneration = 0;
 
 /** @param {import('./ui-logic').AppState} next */
 function setState(next) {
@@ -237,6 +240,7 @@ function setDropzoneFile(displayName, meta) {
 // Back to the empty drop zone (and its record / system audio / link row).
 function clearMedia() {
   if (!guardLoadMedia()) return;
+  mediaGeneration++;
   currentFilePath = null;
   currentFileName = null;
   currentDisplayName = null;
@@ -251,6 +255,7 @@ function clearMedia() {
 
 // Clears transcript/error state when a new input is loaded.
 function resetForNewMedia() {
+  mediaGeneration++;
   clearError();
   btnTranslate.style.display = 'none';
   transcriptEl.value = '';
@@ -328,6 +333,8 @@ async function handleFile(filePath) {
     showError(`Could not read file: ${UiLogic.errorMessage(e)}`);
     return;
   }
+  // A run may have started while getFileInfo was pending.
+  if (!guardLoadMedia()) return;
 
   const sizeMB = (info.size / 1024 / 1024).toFixed(1);
 
@@ -532,7 +539,15 @@ for (const el of [previewAudio, previewVideo]) {
 const TRANSCRIBE_LABEL_HTML = transcribeLabel.innerHTML;
 
 transcribeBtn.addEventListener('click', () => startTranscription());
-cancelBtn.addEventListener('click', () => api.cancelTranscription());
+// The run may take a moment to stop (a model download in progress finishes
+// first), so acknowledge the click and ignore further progress updates.
+let cancelling = false;
+cancelBtn.addEventListener('click', () => {
+  cancelling = true;
+  cancelBtn.disabled = true;
+  transcribeLabel.textContent = 'Cancelling…';
+  api.cancelTranscription();
+});
 
 // New media can't replace the input mid-recording or mid-transcription.
 function guardLoadMedia() {
@@ -573,15 +588,17 @@ async function translateTranscript() {
   btnTranslate.disabled = true;
   btnTranslate.textContent = 'Translating…';
   clearError();
+  const generation = mediaGeneration;
 
   try {
     const translated = await api.translateText(original);
+    if (generation !== mediaGeneration) return; // other media loaded meanwhile
     transcriptEl.value = translated;
     updateCharCount();
     showToast('Translation complete');
     btnTranslate.style.display = 'none';
   } catch (e) {
-    showError(`Translation failed: ${UiLogic.errorMessage(e)}`);
+    if (generation === mediaGeneration) showError(`Translation failed: ${UiLogic.errorMessage(e)}`);
   } finally {
     btnTranslate.disabled = false;
     btnTranslate.textContent = 'Translate to English';
@@ -592,13 +609,15 @@ async function translateTranscript() {
 // While transcribing, the Transcribe button itself is the progress bar.
 /** @param {'download'|'transcribe'} phase @param {number} pct */
 function setButtonProgress(phase, pct) {
-  if (appState !== 'transcribing') return;
+  if (appState !== 'transcribing' || cancelling) return;
   const isStream = /^https?:\/\//i.test(currentFilePath || '');
   transcribeFill.style.width = `${pct}%`;
   transcribeLabel.textContent = UiLogic.progressText(phase, pct, isStream);
 }
 
 function resetTranscribeButton() {
+  cancelling = false;
+  cancelBtn.disabled = false;
   transcribeFill.style.width = '0%';
   transcribeLabel.innerHTML = TRANSCRIBE_LABEL_HTML;
 }
