@@ -7,7 +7,7 @@ function toFileUrl(filePath) {
   return `file://${encoded}`;
 }
 
-contextBridge.exposeInMainWorld('api', {
+const api = {
   getSettings: () => ipcRenderer.invoke('get-settings'),
   setSettings: (settings) => ipcRenderer.invoke('set-settings', settings),
   transcribe: (filePath, startSec, endSec) => ipcRenderer.invoke('transcribe', filePath, startSec, endSec),
@@ -26,4 +26,8 @@ contextBridge.exposeInMainWorld('api', {
   onOpenSettings: (cb) => ipcRenderer.on('open-settings', () => cb()),
   onTranscriptionProgress: (cb) => ipcRenderer.on('transcription-progress', (_, pct) => cb(pct)),
   onModelDownloadProgress: (cb) => ipcRenderer.on('model-download-progress', (_, pct) => cb(pct)),
-});
+};
+
+/** @typedef {typeof api} PreloadApi */
+
+contextBridge.exposeInMainWorld('api', api);

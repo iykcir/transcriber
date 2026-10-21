@@ -2,7 +2,7 @@ const PDFDocument = require('pdfkit');
 const fs = require('fs');
 
 async function exportPDF(transcript, title, outputPath) {
-  return new Promise((resolve, reject) => {
+  return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
     const doc = new PDFDocument({
       size: 'LETTER',
       margins: { top: 72, bottom: 72, left: 72, right: 72 },
@@ -73,7 +73,7 @@ async function exportPDF(transcript, title, outputPath) {
 
     stream.on('finish', resolve);
     stream.on('error', reject);
-  });
+  }));
 }
 
 async function exportDOCX(transcript, title, outputPath) {

@@ -48,6 +48,7 @@ function createWindow() {
 }
 
 function buildMenu() {
+  /** @type {Electron.MenuItemConstructorOptions[]} */
   const template = [
     {
       label: 'Transcriber',

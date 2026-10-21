@@ -5,45 +5,45 @@ let currentFileName = null;
 
 // ── Elements ──────────────────────────────────────────────────────────────────
 const dropzone          = document.getElementById('dropzone');
-const fileInput         = document.getElementById('file-input');
+const fileInput         = /** @type {HTMLInputElement} */ (document.getElementById('file-input'));
 const statusArea        = document.getElementById('status-area');
 const statusSpinner     = document.getElementById('status-spinner');
 const statusIconOk      = document.getElementById('status-icon-ok');
 const statusIconErr     = document.getElementById('status-icon-err');
 const statusText        = document.getElementById('status-text');
 const transcriptSection = document.getElementById('transcript-section');
-const transcriptEl      = document.getElementById('transcript');
+const transcriptEl      = /** @type {HTMLTextAreaElement} */ (document.getElementById('transcript'));
 const charCount         = document.getElementById('char-count');
 const transcribeBtnArea = document.getElementById('transcribe-btn-area');
-const transcribeBtn     = document.getElementById('transcribe-btn');
+const transcribeBtn     = /** @type {HTMLButtonElement} */ (document.getElementById('transcribe-btn'));
 const waveformSection   = document.getElementById('waveform-section');
-const waveformCanvas    = document.getElementById('waveform-canvas');
+const waveformCanvas    = /** @type {HTMLCanvasElement} */ (document.getElementById('waveform-canvas'));
 const waveformSelection = document.getElementById('waveform-selection');
 const handleStart       = document.getElementById('handle-start');
 const handleEnd         = document.getElementById('handle-end');
 const trimStartLabel    = document.getElementById('trim-start-label');
 const trimEndLabel      = document.getElementById('trim-end-label');
 const trimDurationLabel = document.getElementById('trim-duration-label');
-const previewAudio      = document.getElementById('preview-audio');
-const previewVideo      = document.getElementById('preview-video');
-const waveformPlayBtn   = document.getElementById('waveform-play-btn');
+const previewAudio      = /** @type {HTMLAudioElement} */ (document.getElementById('preview-audio'));
+const previewVideo      = /** @type {HTMLVideoElement} */ (document.getElementById('preview-video'));
+const waveformPlayBtn   = /** @type {HTMLButtonElement} */ (document.getElementById('waveform-play-btn'));
 const waveformPlayIcon  = document.getElementById('waveform-play-icon');
 const waveformPauseIcon = document.getElementById('waveform-pause-icon');
 const progressBarWrap   = document.getElementById('progress-bar-wrap');
 const progressFill      = document.getElementById('progress-fill');
 const progressLabel     = document.getElementById('progress-label');
-const btnCopy              = document.getElementById('btn-copy');
-const btnTranslate         = document.getElementById('btn-translate');
-const btnTxt            = document.getElementById('btn-txt');
-const btnMd             = document.getElementById('btn-md');
-const btnDocx           = document.getElementById('btn-docx');
-const btnSrt            = document.getElementById('btn-srt');
-const btnPdf            = document.getElementById('btn-pdf');
+const btnCopy              = /** @type {HTMLButtonElement} */ (document.getElementById('btn-copy'));
+const btnTranslate         = /** @type {HTMLButtonElement} */ (document.getElementById('btn-translate'));
+const btnTxt            = /** @type {HTMLButtonElement} */ (document.getElementById('btn-txt'));
+const btnMd             = /** @type {HTMLButtonElement} */ (document.getElementById('btn-md'));
+const btnDocx           = /** @type {HTMLButtonElement} */ (document.getElementById('btn-docx'));
+const btnSrt            = /** @type {HTMLButtonElement} */ (document.getElementById('btn-srt'));
+const btnPdf            = /** @type {HTMLButtonElement} */ (document.getElementById('btn-pdf'));
 const settingsOverlay   = document.getElementById('settings-overlay');
-const modelSelect       = document.getElementById('model-select');
-const languageSelect    = document.getElementById('language-select');
-const timestampsToggle  = document.getElementById('timestamps-toggle');
-const translateToggle   = document.getElementById('translate-toggle');
+const modelSelect       = /** @type {HTMLSelectElement} */ (document.getElementById('model-select'));
+const languageSelect    = /** @type {HTMLSelectElement} */ (document.getElementById('language-select'));
+const timestampsToggle  = /** @type {HTMLInputElement} */ (document.getElementById('timestamps-toggle'));
+const translateToggle   = /** @type {HTMLInputElement} */ (document.getElementById('translate-toggle'));
 const settingsSave      = document.getElementById('settings-save');
 const settingsCancel    = document.getElementById('settings-cancel');
 const gearBtn           = document.getElementById('gear-btn');
@@ -68,7 +68,7 @@ let isRecording     = false;
 
 const DROPZONE_DEFAULT_HTML = dropzone.innerHTML;
 const inputOptions  = document.getElementById('input-options');
-const urlInput      = document.getElementById('url-input');
+const urlInput      = /** @type {HTMLInputElement} */ (document.getElementById('url-input'));
 const urlLoadBtn    = document.getElementById('url-load-btn');
 
 document.getElementById('record-btn').addEventListener('click', async () => {
@@ -448,7 +448,8 @@ function onPreviewPause() {
 }
 
 function onPreviewTimeUpdate(e) {
-  if (e.target.currentTime >= trimEnd) e.target.pause();
+  const el = /** @type {HTMLMediaElement} */ (e.target);
+  if (el.currentTime >= trimEnd) el.pause();
 }
 
 for (const el of [previewAudio, previewVideo]) {

@@ -9,7 +9,9 @@ const { app } = require('electron');
 // ffmpeg separately. In a packaged app the binary lives in app.asar.unpacked
 // (electron-builder extracts asarUnpack entries there so the OS can execute them).
 function getFfmpegPath() {
-  const bin = require('ffmpeg-static');
+  // The package's .d.ts declares an ES default export, but under CommonJS
+  // require() returns the path string itself.
+  const bin = /** @type {string} */ (/** @type {unknown} */ (require('ffmpeg-static')));
   return app.isPackaged ? bin.replace('app.asar', 'app.asar.unpacked') : bin;
 }
 
@@ -139,7 +141,7 @@ function fetchJson(urlStr) {
 }
 
 function downloadFile(urlStr, destPath) {
-  return new Promise((resolve, reject) => {
+  return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
     https.get(urlStr, { headers: { 'User-Agent': 'transcriber-app' } }, (res) => {
       if (res.statusCode === 301 || res.statusCode === 302) {
         res.resume();
@@ -154,7 +156,7 @@ function downloadFile(urlStr, destPath) {
       file.on('finish', () => file.close(() => resolve()));
       file.on('error', reject);
     }).on('error', reject);
-  });
+  }));
 }
 
 // Ensures a working yt-dlp binary is available and reasonably current,
@@ -434,6 +436,10 @@ function runWhisper(wavPath, modelPath, language, includeTimestamps, translate, 
   });
 }
 
+/**
+ * @param {(pct: number) => void} [onProgress]
+ * @param {(pct: number) => void} [onDownload]
+ */
 async function transcribeAudio(filePath, language, includeTimestamps, model = 'base', translate = false, onProgress = () => {}, onDownload = () => {}, startSec = null, endSec = null) {
   const modelsDir = getModelsDir();
   const modelFile = MODEL_FILES[model] || MODEL_FILES.base;
