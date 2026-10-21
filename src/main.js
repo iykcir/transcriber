@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -53,9 +53,13 @@ function createWindow() {
   mainWindow.webContents.on('will-navigate', (e) => e.preventDefault());
 
   // Once per launch, unless turned off in Settings. Failures are silent.
+  // Deferred a few seconds so the request doesn't compete with startup (a
+  // request fired right at load also breaks automation attaching to main).
   mainWindow.webContents.once('did-finish-load', async () => {
+    await new Promise((r) => setTimeout(r, 3000));
     if (readConfig().checkUpdates === false) return;
-    const update = await require('./update-check').checkForUpdate(app.getVersion());
+    // net.fetch uses Chromium's network stack, so system proxy settings apply.
+    const update = await require('./update-check').checkForUpdate(app.getVersion(), net.fetch);
     if (!update) return;
     availableUpdate = update;
     mainWindow?.webContents.send('update-available', { version: update.version });
