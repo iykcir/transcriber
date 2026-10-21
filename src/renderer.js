@@ -12,6 +12,8 @@ const inlineError       = document.getElementById('inline-error');
 const transcribeLabel   = document.getElementById('transcribe-label');
 const transcribeFill    = document.getElementById('transcribe-fill');
 const cancelBtn         = document.getElementById('cancel-btn');
+const exportBtn         = document.getElementById('export-btn');
+const exportMenu        = document.getElementById('export-menu');
 const fileInput         = /** @type {HTMLInputElement} */ (document.getElementById('file-input'));
 const transcriptEl      = /** @type {HTMLTextAreaElement} */ (document.getElementById('transcript'));
 const charCount         = document.getElementById('char-count');
@@ -574,6 +576,44 @@ function resetTranscribeButton() {
 }
 
 // ── Export ────────────────────────────────────────────────────────────────────
+// Title-bar dropdown holding the per-format save buttons below.
+const exportItems = /** @type {HTMLButtonElement[]} */ ([...exportMenu.querySelectorAll('[role="menuitem"]')]);
+
+function isExportMenuOpen() {
+  return !exportMenu.hidden;
+}
+
+function openExportMenu() {
+  exportMenu.hidden = false;
+  exportBtn.setAttribute('aria-expanded', 'true');
+  exportItems[0].focus();
+}
+
+function closeExportMenu() {
+  if (!isExportMenuOpen()) return;
+  exportMenu.hidden = true;
+  exportBtn.setAttribute('aria-expanded', 'false');
+  exportBtn.focus();
+}
+
+exportBtn.addEventListener('click', () => (isExportMenuOpen() ? closeExportMenu() : openExportMenu()));
+
+exportMenu.addEventListener('keydown', (e) => {
+  if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+  e.preventDefault();
+  const i = exportItems.indexOf(/** @type {HTMLButtonElement} */ (document.activeElement));
+  const step = e.key === 'ArrowDown' ? 1 : -1;
+  exportItems[(i + step + exportItems.length) % exportItems.length].focus();
+});
+
+// Close after choosing a format (the save handlers below still run).
+for (const item of exportItems) item.addEventListener('click', closeExportMenu);
+
+document.addEventListener('mousedown', (e) => {
+  const target = /** @type {Node} */ (e.target);
+  if (isExportMenuOpen() && !exportMenu.contains(target) && !exportBtn.contains(target)) closeExportMenu();
+});
+
 btnCopy.addEventListener('click', () => {
   navigator.clipboard.writeText(transcriptEl.value).then(() => showToast('Copied to clipboard'));
 });
@@ -645,6 +685,23 @@ api.getSettings().then((settings) => {
 });
 modelSelect.addEventListener('change', () => api.setSettings({ model: modelSelect.value }));
 languageSelect.addEventListener('change', () => api.setSettings({ language: languageSelect.value }));
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+// ⌘O lives on the app menu; the rest are decided by UiLogic.shortcutAction.
+document.addEventListener('keydown', (e) => {
+  const action = UiLogic.shortcutAction(e, {
+    state: appState,
+    exportMenuOpen: isExportMenuOpen(),
+    settingsOpen: settingsOverlay.classList.contains('visible'),
+  });
+  if (!action) return;
+  e.preventDefault();
+  if (action === 'transcribe')          startTranscription();
+  else if (action === 'export')         openExportMenu();
+  else if (action === 'copy')           btnCopy.click();
+  else if (action === 'close-export')   closeExportMenu();
+  else if (action === 'close-settings') closeSettings();
+});
 
 // ── IPC from main ─────────────────────────────────────────────────────────────
 api.onFileSelected((filePath) => handleFile(filePath));
