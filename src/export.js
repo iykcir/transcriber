@@ -118,8 +118,10 @@ function exportSRT(transcript) {
   const hasTimestamps = lines.some(l => tsPattern.test(l));
 
   if (!hasTimestamps) {
-    // Produce a single-segment SRT covering the whole file
-    return `1\n00:00:00,000 --> 00:00:00,001\n${transcript.trim()}\n`;
+    // Produce a single-segment SRT covering the whole file. A blank line
+    // ends an SRT cue, so paragraph breaks become single line breaks.
+    const body = transcript.trim().replace(/\n\s*\n/g, '\n');
+    return `1\n00:00:00,000 --> 00:00:00,001\n${body}\n`;
   }
 
   return lines

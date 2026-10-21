@@ -6,6 +6,7 @@ const os = require('os');
 const { app } = require('electron');
 const { MODEL_FILES, buildWhisperArgs } = require('./whisper-args');
 const { createPeakAccumulator } = require('./peaks');
+const { reflowSegments } = require('./transcript-text');
 
 // ffmpeg-static ships a pre-built static binary so users don't need to install
 // ffmpeg separately. In a packaged app the binary lives in app.asar.unpacked
@@ -387,13 +388,9 @@ function runWhisper(wavPath, modelPath, language, includeTimestamps, translate, 
       if (includeTimestamps) {
         resolve(raw);
       } else {
-        // "[HH:MM:SS.mmm --> HH:MM:SS.mmm]   Text" → "Text"
-        const plain = raw
-          .split('\n')
-          .map(l => l.replace(/^\[[\d:.,\s\->]+\]\s*/, '').trim())
-          .filter(Boolean)
-          .join('\n');
-        resolve(plain || raw);
+        // Segments → flowing paragraphs (one segment per line reads as a
+        // ragged column of fragments, especially with the turbo model).
+        resolve(reflowSegments(raw) || raw);
       }
     });
   });
