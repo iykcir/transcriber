@@ -199,15 +199,17 @@ async function ensureYtdlp() {
 // trimmed to [startSec, endSec]. -ss/-t are placed after -i for accurate
 // (decode-based) seeking rather than fast keyframe seeking, since users are
 // trimming a precise selection.
-function ffmpegToWav(inputPath, outPath, startSec, endSec) {
+function ffmpegToWav(inputPath, outPath, startSec, endSec, signal) {
   const args = ['-nostats', '-loglevel', 'error', '-y', '-i', inputPath];
   if (startSec != null) args.push('-ss', String(startSec));
   if (endSec != null) args.push('-t', String(endSec - (startSec || 0)));
   args.push('-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', outPath);
 
   return new Promise((resolve, reject) => {
-    execFile(getFfmpegPath(), args, { env: process.env }, (err) => {
+    execFile(getFfmpegPath(), args, { env: process.env, signal }, (err) => {
       if (err) {
+        // Don't leave a partial WAV behind (e.g. after a cancel mid-conversion).
+        fs.unlink(outPath, () => {});
         const isUrl = /^https?:\/\//i.test(inputPath);
         reject(new Error(isUrl
           ? 'Could not load URL. Check the link is accessible and points to audio or video.'
@@ -229,14 +231,14 @@ function clearYtCache() {
 
 // Try yt-dlp first (reliable), fall back to ytdl-core (best-effort).
 // startSec/endSec optionally trim the result.
-async function downloadYouTube(url, outPath, startSec, endSec) {
+async function downloadYouTube(url, outPath, startSec, endSec, signal) {
   const ytdlpPath = await ensureYtdlp();
   if (ytdlpPath) {
     const rawPath = outPath.replace('.wav', '-raw.%(ext)s');
     return new Promise((resolve, reject) => {
       execFile(ytdlpPath,
         ['-x', '--audio-format', 'best', '-o', rawPath, '--no-playlist', url],
-        { env: process.env },
+        { env: process.env, signal },
         (err) => {
           if (err) return reject(new Error(`yt-dlp failed: ${err.message}`));
           const base = rawPath.replace('.%(ext)s', '');
@@ -244,7 +246,7 @@ async function downloadYouTube(url, outPath, startSec, endSec) {
             .map(f => path.join(os.tmpdir(), f))
             .find(f => f.startsWith(base));
           if (!found) return reject(new Error('yt-dlp download succeeded but output file not found.'));
-          ffmpegToWav(found, outPath, startSec, endSec)
+          ffmpegToWav(found, outPath, startSec, endSec, signal)
             .then((p) => { fs.unlink(found, () => {}); resolve(p); })
             .catch((e) => { fs.unlink(found, () => {}); reject(new Error('Audio conversion failed after yt-dlp download.', { cause: e })); });
         }
@@ -269,7 +271,8 @@ async function downloadYouTube(url, outPath, startSec, endSec) {
     if (startSec != null) args.push('-ss', String(startSec));
     if (endSec != null) args.push('-t', String(endSec - (startSec || 0)));
     args.push('-ar', '16000', '-ac', '1', '-c:a', 'pcm_s16le', outPath);
-    const ffmpeg = spawn(getFfmpegPath(), args, { env: process.env });
+    const ffmpeg = spawn(getFfmpegPath(), args, { env: process.env, signal });
+    signal?.addEventListener('abort', () => ytStream.destroy(), { once: true });
 
     ytStream.on('error', (e) => {
       ffmpeg.kill();
@@ -291,17 +294,17 @@ async function downloadYouTube(url, outPath, startSec, endSec) {
 // startSec/endSec optionally trim the input to that range. For YouTube URLs,
 // reuses the cached download from a prior getWaveformPeaks() call when
 // available instead of re-downloading.
-function convertToWav(inputPath, startSec, endSec) {
+function convertToWav(inputPath, startSec, endSec, signal) {
   const outPath = path.join(os.tmpdir(), `whisper-${Date.now()}.wav`);
 
   if (YOUTUBE_RE.test(inputPath)) {
     if (ytCache && ytCache.url === inputPath && fs.existsSync(ytCache.wavPath)) {
-      return ffmpegToWav(ytCache.wavPath, outPath, startSec, endSec);
+      return ffmpegToWav(ytCache.wavPath, outPath, startSec, endSec, signal);
     }
-    return downloadYouTube(inputPath, outPath, startSec, endSec);
+    return downloadYouTube(inputPath, outPath, startSec, endSec, signal);
   }
 
-  return ffmpegToWav(inputPath, outPath, startSec, endSec);
+  return ffmpegToWav(inputPath, outPath, startSec, endSec, signal);
 }
 
 // Decode audio to raw PCM and bucket it into per-bucket peak amplitudes for
@@ -367,7 +370,7 @@ async function getWaveformPeaks(filePath, bucketCount = 800) {
 
 // Run whisper-cli, streaming stderr for progress events.
 // onProgress(0..100) is called as inference proceeds.
-function runWhisper(wavPath, modelPath, language, includeTimestamps, translate, onProgress) {
+function runWhisper(wavPath, modelPath, language, includeTimestamps, translate, onProgress, signal) {
   return new Promise((resolve, reject) => {
     const args = [
       '-m', modelPath,
@@ -388,7 +391,7 @@ function runWhisper(wavPath, modelPath, language, includeTimestamps, translate, 
     // CPU (BLAS) path is reliable everywhere.
     if (process.arch !== 'arm64') args.push('-ng');
 
-    const proc = spawn(WHISPER_CLI, args, { env: process.env });
+    const proc = spawn(WHISPER_CLI, args, { env: process.env, signal });
 
     let stdout = '';
     let stderr = '';
@@ -436,6 +439,16 @@ function runWhisper(wavPath, modelPath, language, includeTimestamps, translate, 
   });
 }
 
+// The in-flight transcription's controller; cancelTranscription() aborts it,
+// which kills every ffmpeg/yt-dlp/whisper-cli process spawned with its signal.
+let activeJob = null;
+
+function cancelTranscription() {
+  if (!activeJob) return false;
+  activeJob.abort();
+  return true;
+}
+
 /**
  * @param {(pct: number) => void} [onProgress]
  * @param {(pct: number) => void} [onDownload]
@@ -452,16 +465,22 @@ async function transcribeAudio(filePath, language, includeTimestamps, model = 'b
     );
   }
 
-  if (!fs.existsSync(modelPath)) {
-    onDownload(0);
-    await downloadModel(modelFile, modelsDir, onDownload);
-  }
-
-  onProgress(0);
+  const job = new AbortController();
+  activeJob = job;
 
   let wavPath;
   let cleanupWav = false;
   try {
+    // A model download in progress isn't interrupted by cancel (it finishes
+    // and is cached); the job just stops before any audio work starts.
+    if (!fs.existsSync(modelPath)) {
+      onDownload(0);
+      await downloadModel(modelFile, modelsDir, onDownload);
+    }
+    if (job.signal.aborted) throw new Error('Cancelled');
+
+    onProgress(0);
+
     const isUrl = /^https?:\/\//i.test(filePath);
     const ext = path.extname(filePath).toLowerCase();
     const hasTrim = startSec != null || endSec != null;
@@ -469,21 +488,23 @@ async function transcribeAudio(filePath, language, includeTimestamps, model = 'b
       wavPath = filePath;
     } else {
       onProgress(2);
-      wavPath = await convertToWav(filePath, startSec, endSec);
+      wavPath = await convertToWav(filePath, startSec, endSec, job.signal);
       cleanupWav = true;
     }
 
     onProgress(5);
+    if (job.signal.aborted) throw new Error('Cancelled');
 
     const transcript = await runWhisper(wavPath, modelPath, language, includeTimestamps, translate, (pct) => {
       // Map whisper's 0-100 into 5-99 so the bar visibly fills but doesn't
       // prematurely hit 100 before we've processed the result.
       onProgress(5 + Math.round(pct * 0.94));
-    });
+    }, job.signal);
 
     onProgress(100);
     return transcript;
   } catch (err) {
+    if (job.signal.aborted) throw new Error('Cancelled', { cause: err });
     const msg = err.message || '';
     if (msg.includes('ffmpeg')) throw new Error('Audio conversion failed. The file may be corrupted or in an unsupported format.', { cause: err });
     throw new Error(`Transcription failed: ${msg}`, { cause: err });
@@ -491,7 +512,8 @@ async function transcribeAudio(filePath, language, includeTimestamps, model = 'b
     if (cleanupWav && wavPath && fs.existsSync(wavPath)) {
       fs.unlinkSync(wavPath);
     }
+    if (activeJob === job) activeJob = null;
   }
 }
 
-module.exports = { transcribeAudio, MODELS, getWaveformPeaks };
+module.exports = { transcribeAudio, cancelTranscription, MODELS, getWaveformPeaks };

@@ -11,6 +11,7 @@ const api = {
   getSettings: () => ipcRenderer.invoke('get-settings'),
   setSettings: (settings) => ipcRenderer.invoke('set-settings', settings),
   transcribe: (filePath, startSec, endSec) => ipcRenderer.invoke('transcribe', filePath, startSec, endSec),
+  cancelTranscription: () => ipcRenderer.invoke('cancel-transcription'),
   getWaveformPeaks: (filePath) => ipcRenderer.invoke('get-waveform-peaks', filePath),
   toFileUrl,
   savePDF:  (data) => ipcRenderer.invoke('save-pdf',  data),

@@ -168,6 +168,8 @@ ipcMain.handle('transcribe', async (_, filePath, startSec, endSec) => {
   );
 });
 
+ipcMain.handle('cancel-transcription', () => require('./transcribe').cancelTranscription());
+
 ipcMain.handle('get-waveform-peaks', async (_, filePath) => {
   const { getWaveformPeaks } = require('./transcribe');
   return getWaveformPeaks(filePath);
