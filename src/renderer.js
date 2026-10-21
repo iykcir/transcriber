@@ -50,6 +50,7 @@ const toast             = document.getElementById('toast');
 const updateBtn         = document.getElementById('update-btn');
 const updateCheckToggle = /** @type {HTMLInputElement} */ (document.getElementById('update-check-toggle'));
 const keepHistoryToggle = /** @type {HTMLInputElement} */ (document.getElementById('keep-history-toggle'));
+const fillersToggle     = /** @type {HTMLInputElement} */ (document.getElementById('fillers-toggle'));
 const hintInput         = /** @type {HTMLInputElement} */ (document.getElementById('hint-input'));
 const recentsEl         = document.getElementById('recents');
 const recentsList       = document.getElementById('recents-list');
@@ -792,6 +793,7 @@ async function openSettings() {
   translateToggle.checked  = !!settings.translate;
   updateCheckToggle.checked = settings.checkUpdates;
   keepHistoryToggle.checked = settings.keepHistory;
+  fillersToggle.checked     = settings.removeFillers;
   settingsOverlay.classList.add('visible');
 }
 
@@ -812,6 +814,7 @@ settingsSave.addEventListener('click', async () => {
     translate:  translateToggle.checked,
     checkUpdates: updateCheckToggle.checked,
     keepHistory:  keepHistoryToggle.checked,
+    removeFillers: fillersToggle.checked,
   });
   if (!keepHistoryToggle.checked) leaveHistoryEntry();
   if (appState === 'empty') refreshRecents();

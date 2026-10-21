@@ -38,3 +38,8 @@ test('vocabulary hint becomes a single --prompt argument, trimmed and capped', (
   assert.ok(!buildWhisperArgs({ ...base, prompt: '   ' }).includes('--prompt'));
   assert.ok(!buildWhisperArgs({ ...base, prompt: undefined }).includes('--prompt'));
 });
+
+test('auto-detect keeps whisper logs (so the detected language can be read); explicit languages stay quiet', () => {
+  assert.ok(!buildWhisperArgs({ ...base, language: 'auto' }).includes('--no-prints'));
+  assert.ok(buildWhisperArgs({ ...base, language: 'en' }).includes('--no-prints'));
+});

@@ -36,11 +36,12 @@ Downloaded automatically on first use and cached in `~/Library/Application Suppo
 | Turbo (large-v3-turbo, quantized) | 574 MB | Most accurate — near large-v3 quality, faster than Medium |
 
 ### Transcription options
-**Model**, **Language** and optional **Spelling hints** are chosen right next to the Transcribe button; whatever you pick is remembered for next time. **Timestamps**, **Translate to English**, recent transcripts and the launch-time update check live in Settings (⌘,).
+**Model**, **Language** and optional **Spelling hints** are chosen right next to the Transcribe button; whatever you pick is remembered for next time. **Timestamps**, **Translate to English**, filler-word removal, recent transcripts and the launch-time update check live in Settings (⌘,).
 
 - **Spelling hints** — names, jargon or acronyms whisper should spell exactly, separated by commas (e.g. *Okonkwo, Kubernetes, MBS*); a short explanation appears under the field while you type
 
 - **Language** — auto-detect or choose from 14 languages (English, Spanish, French, German, Italian, Portuguese, Dutch, Polish, Russian, Chinese, Japanese, Korean, Arabic, Hindi)
+- **Remove filler words** — on by default: drops "uh", "um", "er", "hmm" and similar from English transcripts and tidies the punctuation around them. Words that are only sometimes fillers ("like", "you know") are left alone, and other languages are untouched
 - **Timestamps** — include `[HH:MM:SS → HH:MM:SS]` segment markers in the output
 - **Translate to English** — whisper transcribes audio in any language and outputs English text directly
 

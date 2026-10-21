@@ -6,7 +6,7 @@ const os = require('os');
 const { app } = require('electron');
 const { MODEL_FILES, buildWhisperArgs } = require('./whisper-args');
 const { createPeakAccumulator } = require('./peaks');
-const { reflowSegments } = require('./transcript-text');
+const { reflowSegments, removeFillersFromRaw, detectedLanguage } = require('./transcript-text');
 
 // ffmpeg-static ships a pre-built static binary so users don't need to install
 // ffmpeg separately. In a packaged app the binary lives in app.asar.unpacked
@@ -349,7 +349,7 @@ async function getWaveformPeaks(filePath, bucketCount = 800) {
 
 // Run whisper-cli, streaming stderr for progress events.
 // onProgress(0..100) is called as inference proceeds.
-function runWhisper(wavPath, modelPath, language, includeTimestamps, translate, prompt, onProgress, signal) {
+function runWhisper(wavPath, modelPath, language, includeTimestamps, translate, prompt, removeFillers, onProgress, signal) {
   return new Promise((resolve, reject) => {
     const args = buildWhisperArgs({ modelPath, wavPath, language, includeTimestamps, translate, prompt });
     const proc = spawn(WHISPER_CLI, args, { env: process.env, signal });
@@ -379,8 +379,11 @@ function runWhisper(wavPath, modelPath, language, includeTimestamps, translate, 
         return;
       }
       // stdout contains the transcript with timestamp brackets.
-      // Strip the brackets to get plain text when timestamps not requested.
-      const raw = stdout.trim();
+      let raw = stdout.trim();
+      // Filler removal is English-only ("um" is a real word in German), so
+      // in auto mode it depends on the language whisper detected.
+      const spoken = (!language || language === 'auto') ? detectedLanguage(stderr) : language;
+      if (removeFillers && (translate || spoken === 'en')) raw = removeFillersFromRaw(raw);
       if (!raw) {
         resolve('(no speech detected)');
         return;
@@ -410,7 +413,7 @@ function cancelTranscription() {
  * @param {(pct: number) => void} [onProgress]
  * @param {(pct: number) => void} [onDownload]
  */
-async function transcribeAudio(filePath, language, includeTimestamps, model = 'base', translate = false, onProgress = () => {}, onDownload = () => {}, startSec = null, endSec = null, prompt = '') {
+async function transcribeAudio(filePath, language, includeTimestamps, model = 'base', translate = false, onProgress = () => {}, onDownload = () => {}, startSec = null, endSec = null, prompt = '', removeFillers = false) {
   const modelsDir = getModelsDir();
   const modelFile = MODEL_FILES[model] || MODEL_FILES.base;
   const modelPath = path.join(modelsDir, modelFile);
@@ -452,7 +455,7 @@ async function transcribeAudio(filePath, language, includeTimestamps, model = 'b
     onProgress(5);
     if (job.signal.aborted) throw new Error('Cancelled');
 
-    const transcript = await runWhisper(wavPath, modelPath, language, includeTimestamps, translate, prompt, (pct) => {
+    const transcript = await runWhisper(wavPath, modelPath, language, includeTimestamps, translate, prompt, removeFillers, (pct) => {
       // Map whisper's 0-100 into 5-99 so the bar visibly fills but doesn't
       // prematurely hit 100 before we've processed the result.
       onProgress(5 + Math.round(pct * 0.94));

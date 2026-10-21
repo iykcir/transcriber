@@ -20,15 +20,18 @@ const MAX_PROMPT_CHARS = 600;
  * @returns {string[]}
  */
 function buildWhisperArgs({ modelPath, wavPath, language, includeTimestamps, translate, prompt, arch = process.arch }) {
+  const auto = !language || language === 'auto';
   const args = [
     '-m', modelPath,
     '-f', wavPath,
     '-pp',                         // print-progress → emits "progress = N%" on stderr
-    '--no-prints',                 // suppress most log noise
-    '-l', (!language || language === 'auto') ? 'auto' : language,
+    '-l', auto ? 'auto' : language,
     // max segment length: split for timestamps, otherwise no hard split
     '-ml', includeTimestamps ? '60' : '0',
   ];
+  // Suppress log noise, except in auto mode: the logs report the detected
+  // language, which decides whether English-only cleanup applies.
+  if (!auto) args.push('--no-prints');
   if (translate) args.push('--translate');
 
   // Names and jargon to bias spelling toward. Passed as one argv entry, so

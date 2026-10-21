@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { reflowSegments } = require('../src/transcript-text');
+const { reflowSegments, removeFillers, removeFillersFromRaw, detectedLanguage } = require('../src/transcript-text');
 
 const seg = (start, end, text) => `[${start} --> ${end}]   ${text}`;
 const ts = (s) => { const h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, sec = (s % 60).toFixed(3).padStart(6, '0'); return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${sec}`; };
@@ -38,4 +38,31 @@ test('unpunctuated speech still breaks into paragraphs of bounded length', () =>
 test('lines without timestamps are kept as text; empty input gives empty string', () => {
   assert.equal(reflowSegments('hello there\ngeneral text'), 'hello there general text');
   assert.equal(reflowSegments('   \n'), '');
+});
+
+test('removeFillers drops standalone uh/um and tidies punctuation and capitals', () => {
+  assert.equal(removeFillers('So, um, we went to the store.'), 'So we went to the store.');
+  assert.equal(removeFillers('I was, uh, going to call.'), 'I was going to call.');
+  assert.equal(removeFillers('Um, the point is simple.'), 'The point is simple.');
+  assert.equal(removeFillers('It was great. Uh, then we left.'), 'It was great. Then we left.');
+  assert.equal(removeFillers('We went, um.'), 'We went.');
+  assert.equal(removeFillers('and uh we went um home'), 'and we went home');
+  assert.equal(removeFillers('Uhh, ummm, hmm... okay.'), 'Okay.');
+  assert.equal(removeFillers('Er, ah, mm, erm, uhm, well.'), 'Well.');
+  assert.equal(removeFillers('um'), '');
+});
+
+test('removeFillers leaves real words and ambiguous fillers alone', () => {
+  const keep = 'Bring an umbrella for her, the hum of the hummingbird, mm-hmm, uh-oh, like you know, I mean well.';
+  assert.equal(removeFillers(keep), keep);
+});
+
+test('removeFillersFromRaw cleans each timed line and drops filler-only lines', () => {
+  const raw = '[00:00:00.000 --> 00:00:01.000]   Um.\n[00:00:01.000 --> 00:00:03.000]   So, uh, we started.\n[00:00:03.000 --> 00:00:04.000]   Then we left.';
+  assert.equal(removeFillersFromRaw(raw), '[00:00:01.000 --> 00:00:03.000]   So we started.\n[00:00:03.000 --> 00:00:04.000]   Then we left.');
+});
+
+test('detectedLanguage reads whisper\'s auto-detect line', () => {
+  assert.equal(detectedLanguage('...\nwhisper_full_with_state: auto-detected language: de (p = 0.996292)\n...'), 'de');
+  assert.equal(detectedLanguage('no detection here'), null);
 });

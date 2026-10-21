@@ -172,6 +172,7 @@ ipcMain.handle('get-settings', () => {
     checkUpdates: config.checkUpdates !== false,
     prompt:     config.prompt     || '',
     keepHistory: config.keepHistory !== false,
+    removeFillers: config.removeFillers !== false,
   };
 });
 
@@ -201,6 +202,7 @@ ipcMain.handle('transcribe', async (_, filePath, startSec, endSec, displayName) 
   const model     = config.model     || 'base';
   const translate = config.translate  || false;
   const prompt    = config.prompt    || '';
+  const removeFillers = config.removeFillers !== false;
   const progress = (channel) => (pct) => {
     mainWindow?.setProgressBar(pct / 100);
     mainWindow?.webContents.send(channel, pct);
@@ -209,7 +211,7 @@ ipcMain.handle('transcribe', async (_, filePath, startSec, endSec, displayName) 
     const text = await transcribeAudio(filePath, language, timestamps, model, translate,
       progress('transcription-progress'),
       progress('model-download-progress'),
-      startSec ?? null, endSec ?? null, prompt,
+      startSec ?? null, endSec ?? null, prompt, removeFillers,
     );
     finishJob('done', displayName);
     return text;
