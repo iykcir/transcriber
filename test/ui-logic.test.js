@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { shortcutAction, isCancelledError, progressText, canLoadMedia, errorMessage } = require('../src/ui-logic');
+const { shortcutAction, isCancelledError, progressText, canLoadMedia, errorMessage, relativeTime } = require('../src/ui-logic');
 
 const ctx = (state, o = {}) => ({ state, exportMenuOpen: false, settingsOpen: false, ...o });
 const key = (k, o = {}) => ({ key: k, metaKey: false, shiftKey: false, ...o });
@@ -60,4 +60,15 @@ test('errorMessage strips Electron IPC wrapping', () => {
   assert.equal(errorMessage(new Error('Invalid URL.')), 'Invalid URL.');
   assert.equal(errorMessage(new Error('')), '');
   assert.equal(errorMessage('nope'), '');
+});
+
+test('relativeTime', () => {
+  const now = new Date(2026, 9, 21, 15, 0).getTime();
+  const min = 60_000;
+  assert.equal(relativeTime(now - 20_000, now), 'Just now');
+  assert.equal(relativeTime(now - 5 * min, now), '5 min ago');
+  assert.equal(relativeTime(now - 3 * 60 * min, now), '3 hr ago');
+  assert.equal(relativeTime(new Date(2026, 9, 20, 9, 0).getTime(), now), 'Yesterday');
+  assert.equal(relativeTime(new Date(2026, 9, 3, 9, 0).getTime(), now), 'Oct 3');
+  assert.equal(relativeTime(new Date(2025, 11, 30, 9, 0).getTime(), now), 'Dec 30, 2025');
 });

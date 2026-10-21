@@ -49,6 +49,10 @@ const gearBtn           = document.getElementById('gear-btn');
 const toast             = document.getElementById('toast');
 const updateBtn         = document.getElementById('update-btn');
 const updateCheckToggle = /** @type {HTMLInputElement} */ (document.getElementById('update-check-toggle'));
+const keepHistoryToggle = /** @type {HTMLInputElement} */ (document.getElementById('keep-history-toggle'));
+const hintInput         = /** @type {HTMLInputElement} */ (document.getElementById('hint-input'));
+const recentsEl         = document.getElementById('recents');
+const recentsList       = document.getElementById('recents-list');
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 let toastTimer;
@@ -78,6 +82,7 @@ function setState(next) {
     : currentDisplayName;
   // Waveform height differs per state (folded once transcribed).
   if (waveformPeaks) requestAnimationFrame(drawWaveform);
+  if (next === 'empty') refreshRecents();
 }
 
 /** @param {string} msg */
@@ -242,6 +247,7 @@ function setDropzoneFile(displayName, meta) {
 // Back to the empty drop zone (and its record / system audio / link row).
 function clearMedia() {
   if (!guardLoadMedia()) return;
+  leaveHistoryEntry();
   mediaGeneration++;
   currentFilePath = null;
   currentFileName = null;
@@ -257,6 +263,7 @@ function clearMedia() {
 
 // Clears transcript/error state when a new input is loaded.
 function resetForNewMedia() {
+  leaveHistoryEntry();
   mediaGeneration++;
   clearError();
   btnTranslate.style.display = 'none';
@@ -568,12 +575,20 @@ async function startTranscription() {
   setButtonProgress('transcribe', 0);
 
   try {
+    // ⌘↩ can fire while the hint field still has focus, before its change event.
+    await saveHint();
     const hasTrim = waveformPeaks && (trimStart > 0.05 || trimEnd < mediaDuration - 0.05);
-    const text = await api.transcribe(currentFilePath, hasTrim ? trimStart : null, hasTrim ? trimEnd : null);
+    const text = await api.transcribe(currentFilePath, hasTrim ? trimStart : null, hasTrim ? trimEnd : null, currentDisplayName);
     transcriptEl.value = text;
     updateCharCount();
     btnTranslate.style.display = '';
     setState('transcribed');
+    currentHistoryId = await api.addHistory({
+      name: currentDisplayName || currentFileName,
+      fileName: currentFileName,
+      source: currentFilePath,
+      text,
+    });
   } catch (e) {
     setState('loaded');
     // A user cancel isn't an error: just return to the loaded file.
@@ -596,6 +611,7 @@ async function translateTranscript() {
     const translated = await api.translateText(original);
     if (generation !== mediaGeneration) return; // other media loaded meanwhile
     transcriptEl.value = translated;
+    if (currentHistoryId) api.updateHistory(currentHistoryId, translated);
     updateCharCount();
     showToast('Translation complete');
     btnTranslate.style.display = 'none';
@@ -692,7 +708,77 @@ btnPdf.addEventListener('click', async () => {
   if (saved) showToast('Saved as PDF');
 });
 
-transcriptEl.addEventListener('input', updateCharCount);
+transcriptEl.addEventListener('input', () => {
+  updateCharCount();
+  scheduleHistorySave();
+});
+
+// ── Recent transcripts ────────────────────────────────────────────────────────
+// The transcript on screen, if it's saved in history; edits are written back
+// shortly after typing stops.
+let currentHistoryId = null;
+let historySaveTimer = null;
+
+function scheduleHistorySave() {
+  if (!currentHistoryId) return;
+  clearTimeout(historySaveTimer);
+  historySaveTimer = setTimeout(flushHistorySave, 600);
+}
+
+function flushHistorySave() {
+  if (!historySaveTimer) return;
+  clearTimeout(historySaveTimer);
+  historySaveTimer = null;
+  if (currentHistoryId) api.updateHistory(currentHistoryId, transcriptEl.value);
+}
+
+// Call before the transcript on screen is replaced or cleared.
+function leaveHistoryEntry() {
+  flushHistorySave();
+  currentHistoryId = null;
+}
+
+async function refreshRecents() {
+  const items = await api.listHistory();
+  recentsList.replaceChildren(...items.map(renderRecentRow));
+  recentsEl.hidden = items.length === 0;
+}
+
+function renderRecentRow({ id, name, createdAt, chars }) {
+  const li = document.createElement('li');
+  li.innerHTML = `
+    <button class="recent-open"><span class="recent-name"></span><span class="recent-meta"></span></button>
+    <button class="icon-btn recent-remove" aria-label="Remove from recents" title="Remove from recents">
+      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>`;
+  li.querySelector('.recent-name').textContent = name;
+  li.querySelector('.recent-meta').textContent =
+    `${UiLogic.relativeTime(createdAt)} · ${chars.toLocaleString()} chars`;
+  li.querySelector('.recent-open').addEventListener('click', () => openRecent(id));
+  li.querySelector('.recent-remove').addEventListener('click', async () => {
+    await api.removeHistory(id);
+    refreshRecents();
+  });
+  return li;
+}
+
+async function openRecent(id) {
+  if (!guardLoadMedia()) return;
+  const entry = await api.getHistory(id);
+  if (!entry) return refreshRecents();
+  leaveHistoryEntry();
+  mediaGeneration++;
+  currentFilePath = entry.source;
+  currentFileName = entry.fileName;
+  hideWaveform();
+  clearError();
+  setDropzoneFile(entry.name, `Saved transcript · ${UiLogic.relativeTime(entry.createdAt)}`);
+  transcriptEl.value = entry.text;
+  updateCharCount();
+  btnTranslate.style.display = '';
+  currentHistoryId = id;
+  setState('transcribed');
+}
 
 function updateCharCount() {
   const len = transcriptEl.value.length;
@@ -705,6 +791,7 @@ async function openSettings() {
   timestampsToggle.checked = !!settings.timestamps;
   translateToggle.checked  = !!settings.translate;
   updateCheckToggle.checked = settings.checkUpdates;
+  keepHistoryToggle.checked = settings.keepHistory;
   settingsOverlay.classList.add('visible');
 }
 
@@ -724,7 +811,10 @@ settingsSave.addEventListener('click', async () => {
     timestamps: timestampsToggle.checked,
     translate:  translateToggle.checked,
     checkUpdates: updateCheckToggle.checked,
+    keepHistory:  keepHistoryToggle.checked,
   });
+  if (!keepHistoryToggle.checked) leaveHistoryEntry();
+  if (appState === 'empty') refreshRecents();
   closeSettings();
   showToast('Settings saved');
 });
@@ -733,7 +823,20 @@ settingsSave.addEventListener('click', async () => {
 api.getSettings().then((settings) => {
   modelSelect.value    = settings.model    || 'base';
   languageSelect.value = settings.language || 'auto';
+  hintInput.value      = settings.prompt   || '';
+  savedHint            = hintInput.value;
 });
+
+// Vocabulary hint: names and terms whisper should spell correctly. Remembered
+// like the pickers.
+let savedHint = '';
+async function saveHint() {
+  const value = hintInput.value.trim();
+  if (value === savedHint) return;
+  savedHint = value;
+  await api.setSettings({ prompt: value });
+}
+hintInput.addEventListener('change', saveHint);
 modelSelect.addEventListener('change', () => api.setSettings({ model: modelSelect.value }));
 languageSelect.addEventListener('change', () => api.setSettings({ language: languageSelect.value }));
 

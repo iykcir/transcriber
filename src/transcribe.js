@@ -4,6 +4,7 @@ const https = require('https');
 const path = require('path');
 const os = require('os');
 const { app } = require('electron');
+const { MODEL_FILES, buildWhisperArgs } = require('./whisper-args');
 
 // ffmpeg-static ships a pre-built static binary so users don't need to install
 // ffmpeg separately. In a packaged app the binary lives in app.asar.unpacked
@@ -80,20 +81,6 @@ function downloadModel(modelFile, destDir, onProgress) {
     fetch(`${MODEL_BASE_URL}/${modelFile}`);
   });
 }
-
-const MODEL_FILES = {
-  tiny:   'ggml-tiny.bin',
-  base:   'ggml-base.bin',
-  small:  'ggml-small.bin',
-  medium: 'ggml-medium.bin',
-};
-
-const MODELS = {
-  tiny:   { label: 'Tiny (75 MB)',    name: 'tiny' },
-  base:   { label: 'Base (142 MB)',   name: 'base' },
-  small:  { label: 'Small (466 MB)',  name: 'small' },
-  medium: { label: 'Medium (1.5 GB)', name: 'medium' },
-};
 
 const YOUTUBE_RE = /(?:youtube\.com\/(?:watch\?.*v=|shorts\/)|youtu\.be\/)[\w-]{11}/;
 
@@ -377,27 +364,9 @@ async function getWaveformPeaks(filePath, bucketCount = 800) {
 
 // Run whisper-cli, streaming stderr for progress events.
 // onProgress(0..100) is called as inference proceeds.
-function runWhisper(wavPath, modelPath, language, includeTimestamps, translate, onProgress, signal) {
+function runWhisper(wavPath, modelPath, language, includeTimestamps, translate, prompt, onProgress, signal) {
   return new Promise((resolve, reject) => {
-    const args = [
-      '-m', modelPath,
-      '-f', wavPath,
-      '-pp',                         // print-progress → emits "progress = N%" on stderr
-      '--no-prints',                 // suppress most log noise
-      '-l', (!language || language === 'auto') ? 'auto' : language,
-      ...(translate ? ['--translate'] : []),
-    ];
-
-    if (includeTimestamps) {
-      args.push('-ml', '60');        // max segment length
-    } else {
-      args.push('-ml', '0');        // no hard segment split
-    }
-
-    // Metal backend silently produces empty output on Intel iGPUs.
-    // CPU (BLAS) path is reliable everywhere.
-    if (process.arch !== 'arm64') args.push('-ng');
-
+    const args = buildWhisperArgs({ modelPath, wavPath, language, includeTimestamps, translate, prompt });
     const proc = spawn(WHISPER_CLI, args, { env: process.env, signal });
 
     let stdout = '';
@@ -460,7 +429,7 @@ function cancelTranscription() {
  * @param {(pct: number) => void} [onProgress]
  * @param {(pct: number) => void} [onDownload]
  */
-async function transcribeAudio(filePath, language, includeTimestamps, model = 'base', translate = false, onProgress = () => {}, onDownload = () => {}, startSec = null, endSec = null) {
+async function transcribeAudio(filePath, language, includeTimestamps, model = 'base', translate = false, onProgress = () => {}, onDownload = () => {}, startSec = null, endSec = null, prompt = '') {
   const modelsDir = getModelsDir();
   const modelFile = MODEL_FILES[model] || MODEL_FILES.base;
   const modelPath = path.join(modelsDir, modelFile);
@@ -502,7 +471,7 @@ async function transcribeAudio(filePath, language, includeTimestamps, model = 'b
     onProgress(5);
     if (job.signal.aborted) throw new Error('Cancelled');
 
-    const transcript = await runWhisper(wavPath, modelPath, language, includeTimestamps, translate, (pct) => {
+    const transcript = await runWhisper(wavPath, modelPath, language, includeTimestamps, translate, prompt, (pct) => {
       // Map whisper's 0-100 into 5-99 so the bar visibly fills but doesn't
       // prematurely hit 100 before we've processed the result.
       onProgress(5 + Math.round(pct * 0.94));
@@ -523,4 +492,4 @@ async function transcribeAudio(filePath, language, includeTimestamps, model = 'b
   }
 }
 
-module.exports = { transcribeAudio, cancelTranscription, MODELS, getWaveformPeaks };
+module.exports = { transcribeAudio, cancelTranscription, getWaveformPeaks };

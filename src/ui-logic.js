@@ -51,11 +51,33 @@ function progressText(phase, pct, isStream) {
   return `Transcribing… ${pct}%`;
 }
 
+/**
+ * Short label for when a saved transcript was made: "Just now", "5 min ago",
+ * "3 hr ago" (today), "Yesterday", "Oct 3", or "Dec 30, 2025" (other years).
+ * @param {number} ts
+ * @param {number} [now]
+ */
+function relativeTime(ts, now = Date.now()) {
+  const mins = Math.floor((now - ts) / 60_000);
+  const then = new Date(ts);
+  const today = new Date(now);
+  const sameDay = then.toDateString() === today.toDateString();
+  if (sameDay && mins < 1) return 'Just now';
+  if (sameDay && mins < 60) return `${mins} min ago`;
+  if (sameDay) return `${Math.floor(mins / 60)} hr ago`;
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (then.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  const opts = /** @type {Intl.DateTimeFormatOptions} */ ({ month: 'short', day: 'numeric' });
+  if (then.getFullYear() !== today.getFullYear()) opts.year = 'numeric';
+  return then.toLocaleDateString('en-US', opts);
+}
+
 /** @param {AppState} state */
 function canLoadMedia(state) {
   return state !== 'recording' && state !== 'transcribing';
 }
 
-const UiLogic = { shortcutAction, isCancelledError, errorMessage, progressText, canLoadMedia };
+const UiLogic = { shortcutAction, isCancelledError, errorMessage, progressText, canLoadMedia, relativeTime };
 if (typeof module !== 'undefined') module.exports = UiLogic;
 else globalThis.UiLogic = UiLogic;

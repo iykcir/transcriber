@@ -356,6 +356,67 @@
     .rec-label { color: var(--text-secondary); }
     .rec-buttons { display: flex; gap: 8px; margin-top: 4px; }
 
+    /* Recent transcripts — under the drop zone, empty state only. */
+    #recents { display: none; flex-direction: column; gap: 4px; max-height: 40%; min-height: 0; flex-shrink: 0; }
+    body[data-state="empty"] #recents:not([hidden]) { display: flex; }
+
+    #recents h2 {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 0 10px 2px;
+    }
+
+    #recents-list {
+      list-style: none;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+    }
+
+    #recents-list li {
+      display: flex;
+      align-items: center;
+      border-radius: 8px;
+      transition: background var(--ease);
+    }
+    #recents-list li:hover, #recents-list li:focus-within { background: var(--hover); }
+
+    .recent-open {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      height: 32px;
+      padding: 0 10px;
+      background: none;
+      border: none;
+      border-radius: 8px;
+      text-align: left;
+      cursor: pointer;
+    }
+    .recent-name {
+      font-weight: 500;
+      min-width: 0;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .recent-meta {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--text-secondary);
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+    .recent-remove { opacity: 0; margin-right: 4px; }
+    #recents-list li:hover .recent-remove,
+    #recents-list li:focus-within .recent-remove { opacity: 1; }
+
     /* ── Buttons ───────────────────────────────────────────────────────── */
     .btn-primary {
       position: relative;
@@ -519,7 +580,24 @@
       max-width: 200px;
     }
     .picker:hover { background-color: var(--border); }
-    body[data-state="transcribing"] .picker { pointer-events: none; opacity: 0.5; }
+
+    /* Optional vocabulary hint, styled to match the pickers. */
+    .hint {
+      height: 26px;
+      flex: 0 1 220px;
+      min-width: 110px;
+      padding: 0 12px;
+      border: none;
+      border-radius: 13px;
+      background: var(--hover);
+      user-select: text;
+      transition: background var(--ease);
+    }
+    .hint:hover { background: var(--border); }
+    .hint::placeholder { color: var(--text-secondary); }
+
+    body[data-state="transcribing"] .picker,
+    body[data-state="transcribing"] .hint { pointer-events: none; opacity: 0.5; }
 
     #transcribe-btn { min-width: 150px; }
     #transcribe-fill {
@@ -748,6 +826,11 @@
         </div>
       </div>
     </div>
+    <!-- Recent transcripts (empty state) -->
+    <section id="recents" aria-labelledby="recents-title" hidden>
+      <h2 id="recents-title">Recent</h2>
+      <ul id="recents-list"></ul>
+    </section>
     <!-- Waveform trim -->
     <div id="waveform-section">
       <video id="preview-video"></video>
@@ -777,7 +860,8 @@
         <option value="tiny">Tiny · fastest</option>
         <option value="base" selected>Base · recommended</option>
         <option value="small">Small · more accurate</option>
-        <option value="medium">Medium · best quality</option>
+        <option value="medium">Medium · very accurate</option>
+        <option value="turbo">Turbo · most accurate</option>
       </select>
       <select class="picker" id="language-select" title="Spoken language" aria-label="Language">
         <option value="auto">Auto-detect</option>
@@ -796,6 +880,9 @@
         <option value="ar">Arabic</option>
         <option value="hi">Hindi</option>
       </select>
+      <input class="hint" id="hint-input" type="text" maxlength="600" spellcheck="false"
+        placeholder="Names &amp; terms…" aria-label="Vocabulary hint"
+        title="Optional: names and terms to spell correctly, e.g. Kubernetes, Dr. Okonkwo" />
       <div class="spacer"></div>
       <button class="btn-ghost" id="cancel-btn">Cancel</button>
       <button class="btn-primary" id="transcribe-btn">
@@ -841,8 +928,15 @@
         <span class="toggle-slider"></span>
       </label>
     </div>
+    <div class="form-group toggle-group">
+      <label for="keep-history-toggle">Keep recent transcripts</label>
+      <label class="toggle">
+        <input type="checkbox" id="keep-history-toggle" />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
     <div class="settings-note">
-      Models are downloaded on first use and cached locally. Choose the model and language next to the Transcribe button.
+      Models are downloaded on first use and cached locally. Choose the model, language and any names or terms next to the Transcribe button. Recent transcripts stay on this Mac.
     </div>
     <div class="settings-footer">
       <button class="btn-ghost" id="settings-cancel">Cancel</button>

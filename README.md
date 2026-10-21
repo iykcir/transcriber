@@ -32,10 +32,13 @@ Downloaded automatically on first use and cached in `~/Library/Application Suppo
 | Tiny | 75 MB | Fastest |
 | Base | 142 MB | Recommended |
 | Small | 466 MB | More accurate |
-| Medium | 1.5 GB | Best quality |
+| Medium | 1.5 GB | Very accurate |
+| Turbo (large-v3-turbo, quantized) | 574 MB | Most accurate — near large-v3 quality, faster than Medium |
 
 ### Transcription options
-**Model** and **Language** are chosen right next to the Transcribe button; whatever you pick is remembered as the default for next time. **Timestamps**, **Translate to English** and the launch-time update check live in Settings (⌘,).
+**Model**, **Language** and an optional **Names & terms** hint are chosen right next to the Transcribe button; whatever you pick is remembered for next time. **Timestamps**, **Translate to English**, recent transcripts and the launch-time update check live in Settings (⌘,).
+
+- **Names & terms** — list names, jargon or acronyms (e.g. *Kubernetes, Dr. Okonkwo*) and whisper will favour those spellings
 
 - **Language** — auto-detect or choose from 14 languages (English, Spanish, French, German, Italian, Portuguese, Dutch, Polish, Russian, Chinese, Japanese, Korean, Arabic, Hindi)
 - **Timestamps** — include `[HH:MM:SS → HH:MM:SS]` segment markers in the output
@@ -44,12 +47,16 @@ Downloaded automatically on first use and cached in `~/Library/Application Suppo
 ### Post-transcription
 - **Translate to English** — translates any completed transcript to English via Google Translate without re-transcribing
 
+### Recent transcripts
+Every finished transcript is saved on your Mac and listed under the drop zone when no file is open — click one to reopen it. Edits and translations are saved automatically. Hover a row and click **×** to remove it, or turn off **Keep recent transcripts** in Settings to stop saving and clear the list. The 25 most recent are kept.
+
 ### Export
 From the **Export** menu in the title bar (⌘S): TXT · Markdown · DOCX (Word) · SRT (subtitles) · PDF
 
 ### Other
 - The Transcribe button doubles as the progress bar, showing the phase (fetching, preparing, transcribing) and percentage
 - **Cancel** stops a running transcription immediately (a model download in progress finishes and is cached)
+- Progress also shows on the Dock icon, and if you've switched to another app you get a notification when the transcription finishes
 - Model download progress shown on first use
 - Once transcribed, the waveform folds away so the transcript fills the window
 - Copy transcript to clipboard (⌘⇧C)

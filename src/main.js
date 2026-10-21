@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, shell, net } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell, net, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -10,6 +10,9 @@ const EXTRA_PATHS = ['/opt/homebrew/bin', '/opt/homebrew/sbin', '/usr/local/bin'
 process.env.PATH = [...EXTRA_PATHS, ...(process.env.PATH || '').split(':').filter(Boolean)].join(':');
 
 let mainWindow;
+
+const { createHistoryStore } = require('./history');
+const history = createHistoryStore(path.join(app.getPath('userData'), 'history.json'));
 // Newer release found by the launch-time check: { version, url } or null.
 let availableUpdate = null;
 
@@ -167,26 +170,61 @@ ipcMain.handle('get-settings', () => {
     model:      config.model      || 'base',
     translate:  config.translate  || false,
     checkUpdates: config.checkUpdates !== false,
+    prompt:     config.prompt     || '',
+    keepHistory: config.keepHistory !== false,
   };
 });
 
 ipcMain.handle('set-settings', (_, settings) => {
   writeConfig(settings);
+  // Turning history off also forgets what was kept.
+  if (settings.keepHistory === false) history.clear();
 });
 
-ipcMain.handle('transcribe', async (_, filePath, startSec, endSec) => {
+// Shows progress on the Dock icon and, if the user has switched away, a
+// notification when the run ends.
+function finishJob(outcome, displayName) {
+  mainWindow?.setProgressBar(-1);
+  const { jobNotice } = require('./notify');
+  const notice = jobNotice({ outcome, name: displayName, focused: !!mainWindow?.isFocused() });
+  if (!notice || !Notification.isSupported()) return;
+  const n = new Notification(notice);
+  n.on('click', () => { mainWindow?.show(); mainWindow?.focus(); });
+  n.show();
+}
+
+ipcMain.handle('transcribe', async (_, filePath, startSec, endSec, displayName) => {
   const { transcribeAudio } = require('./transcribe');
   const config = readConfig();
   const language  = config.language  || 'auto';
   const timestamps = config.timestamps || false;
   const model     = config.model     || 'base';
   const translate = config.translate  || false;
-  return transcribeAudio(filePath, language, timestamps, model, translate,
-    (pct) => mainWindow?.webContents.send('transcription-progress', pct),
-    (pct) => mainWindow?.webContents.send('model-download-progress', pct),
-    startSec ?? null, endSec ?? null,
-  );
+  const prompt    = config.prompt    || '';
+  const progress = (channel) => (pct) => {
+    mainWindow?.setProgressBar(pct / 100);
+    mainWindow?.webContents.send(channel, pct);
+  };
+  try {
+    const text = await transcribeAudio(filePath, language, timestamps, model, translate,
+      progress('transcription-progress'),
+      progress('model-download-progress'),
+      startSec ?? null, endSec ?? null, prompt,
+    );
+    finishJob('done', displayName);
+    return text;
+  } catch (err) {
+    finishJob(err.message === 'Cancelled' ? 'cancelled' : 'failed', displayName);
+    throw err;
+  }
 });
+
+// Recent transcripts. Adding is skipped while history is turned off.
+ipcMain.handle('history-list', () => history.list());
+ipcMain.handle('history-get', (_, id) => history.get(id));
+ipcMain.handle('history-add', (_, entry) => (readConfig().keepHistory === false ? null : history.add(entry)));
+ipcMain.handle('history-update', (_, id, text) => history.update(id, { text }));
+ipcMain.handle('history-remove', (_, id) => history.remove(id));
 
 // Opens only the release page main itself found; the renderer can't pass a URL.
 ipcMain.handle('open-release-page', () => {
