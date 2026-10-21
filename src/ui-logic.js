@@ -32,6 +32,14 @@ function isCancelledError(err) {
   return err instanceof Error && /(^|: )Cancelled$/.test(err.message);
 }
 
+// The user-facing part of an error, without Electron's IPC wrapping
+// ("Error invoking remote method '<channel>': <Name>: ").
+/** @param {unknown} err */
+function errorMessage(err) {
+  if (!(err instanceof Error)) return '';
+  return err.message.replace(/^Error invoking remote method '[^']*': (\w*Error: )?/, '');
+}
+
 /**
  * @param {'download'|'transcribe'} phase
  * @param {number} pct
@@ -48,6 +56,6 @@ function canLoadMedia(state) {
   return state !== 'recording' && state !== 'transcribing';
 }
 
-const UiLogic = { shortcutAction, isCancelledError, progressText, canLoadMedia };
+const UiLogic = { shortcutAction, isCancelledError, errorMessage, progressText, canLoadMedia };
 if (typeof module !== 'undefined') module.exports = UiLogic;
 else globalThis.UiLogic = UiLogic;

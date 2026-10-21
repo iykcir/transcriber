@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { shortcutAction, isCancelledError, progressText, canLoadMedia } = require('../src/ui-logic');
+const { shortcutAction, isCancelledError, progressText, canLoadMedia, errorMessage } = require('../src/ui-logic');
 
 const ctx = (state, o = {}) => ({ state, exportMenuOpen: false, settingsOpen: false, ...o });
 const key = (k, o = {}) => ({ key: k, metaKey: false, shiftKey: false, ...o });
@@ -52,4 +52,12 @@ test('progressText', () => {
 test('canLoadMedia is false only while recording or transcribing', () => {
   for (const s of ['empty', 'loaded', 'transcribed']) assert.equal(canLoadMedia(s), true);
   for (const s of ['recording', 'transcribing']) assert.equal(canLoadMedia(s), false);
+});
+
+test('errorMessage strips Electron IPC wrapping', () => {
+  assert.equal(errorMessage(new Error("Error invoking remote method 'transcribe': Error: Transcription failed: boom")), 'Transcription failed: boom');
+  assert.equal(errorMessage(new Error("Error invoking remote method 'translate-text': TypeError: fetch failed")), 'fetch failed');
+  assert.equal(errorMessage(new Error('Invalid URL.')), 'Invalid URL.');
+  assert.equal(errorMessage(new Error('')), '');
+  assert.equal(errorMessage('nope'), '');
 });

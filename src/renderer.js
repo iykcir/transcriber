@@ -10,6 +10,8 @@ const inputRow          = document.getElementById('input-row');
 const titleText         = document.getElementById('title-text');
 const inlineError       = document.getElementById('inline-error');
 const transcribeLabel   = document.getElementById('transcribe-label');
+const transcribeFill    = document.getElementById('transcribe-fill');
+const cancelBtn         = document.getElementById('cancel-btn');
 const fileInput         = /** @type {HTMLInputElement} */ (document.getElementById('file-input'));
 const transcriptEl      = /** @type {HTMLTextAreaElement} */ (document.getElementById('transcript'));
 const charCount         = document.getElementById('char-count');
@@ -233,7 +235,7 @@ function resetForNewMedia() {
 }
 
 async function loadUrl(url) {
-  if (!url) return;
+  if (!url || !guardLoadMedia()) return;
   let parsed;
   try { parsed = new URL(url); } catch { showError('Invalid URL.'); return; }
 
@@ -289,11 +291,12 @@ fileInput.addEventListener('change', () => {
 
 // ── File Handling ─────────────────────────────────────────────────────────────
 async function handleFile(filePath) {
+  if (!guardLoadMedia()) return;
   let info;
   try {
     info = await api.getFileInfo(filePath);
   } catch (e) {
-    showError(`Could not read file: ${e.message}`);
+    showError(`Could not read file: ${UiLogic.errorMessage(e)}`);
     return;
   }
 
@@ -499,6 +502,14 @@ for (const el of [previewAudio, previewVideo]) {
 const TRANSCRIBE_LABEL_HTML = transcribeLabel.innerHTML;
 
 transcribeBtn.addEventListener('click', () => startTranscription());
+cancelBtn.addEventListener('click', () => api.cancelTranscription());
+
+// New media can't replace the input mid-recording or mid-transcription.
+function guardLoadMedia() {
+  if (UiLogic.canLoadMedia(appState)) return true;
+  showToast(appState === 'recording' ? 'Stop the recording first' : 'Cancel the current transcription first');
+  return false;
+}
 btnTranslate.addEventListener('click', translateTranscript);
 
 async function startTranscription() {
@@ -507,6 +518,7 @@ async function startTranscription() {
   clearError();
   btnTranslate.style.display = 'none';
   setState('transcribing');
+  setButtonProgress('transcribe', 0);
 
   try {
     const hasTrim = waveformPeaks && (trimStart > 0.05 || trimEnd < mediaDuration - 0.05);
@@ -517,9 +529,10 @@ async function startTranscription() {
     setState('transcribed');
   } catch (e) {
     setState('loaded');
-    showError(e.message || 'Transcription failed.');
+    // A user cancel isn't an error: just return to the loaded file.
+    if (!UiLogic.isCancelledError(e)) showError(UiLogic.errorMessage(e) || 'Transcription failed.');
   } finally {
-    transcribeLabel.innerHTML = TRANSCRIBE_LABEL_HTML;
+    resetTranscribeButton();
   }
 }
 
@@ -538,7 +551,7 @@ async function translateTranscript() {
     showToast('Translation complete');
     btnTranslate.style.display = 'none';
   } catch (e) {
-    showError(`Translation failed: ${e.message}`);
+    showError(`Translation failed: ${UiLogic.errorMessage(e)}`);
   } finally {
     btnTranslate.disabled = false;
     btnTranslate.textContent = 'Translate to English';
@@ -546,10 +559,18 @@ async function translateTranscript() {
 }
 
 // ── Progress ──────────────────────────────────────────────────────────────────
+// While transcribing, the Transcribe button itself is the progress bar.
 /** @param {'download'|'transcribe'} phase @param {number} pct */
-function setProgressText(phase, pct) {
+function setButtonProgress(phase, pct) {
+  if (appState !== 'transcribing') return;
   const isStream = /^https?:\/\//i.test(currentFilePath || '');
+  transcribeFill.style.width = `${pct}%`;
   transcribeLabel.textContent = UiLogic.progressText(phase, pct, isStream);
+}
+
+function resetTranscribeButton() {
+  transcribeFill.style.width = '0%';
+  transcribeLabel.innerHTML = TRANSCRIBE_LABEL_HTML;
 }
 
 // ── Export ────────────────────────────────────────────────────────────────────
@@ -628,7 +649,7 @@ languageSelect.addEventListener('change', () => api.setSettings({ language: lang
 // ── IPC from main ─────────────────────────────────────────────────────────────
 api.onFileSelected((filePath) => handleFile(filePath));
 api.onOpenSettings(() => openSettings());
-api.onTranscriptionProgress((pct) => setProgressText('transcribe', pct));
-api.onModelDownloadProgress((pct) => setProgressText('download', pct));
+api.onTranscriptionProgress((pct) => setButtonProgress('transcribe', pct));
+api.onModelDownloadProgress((pct) => setButtonProgress('download', pct));
 
 setState('empty');
