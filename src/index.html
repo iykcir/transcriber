@@ -77,6 +77,9 @@
       backdrop-filter: blur(20px);
       border-bottom: 1px solid var(--border);
       position: relative;
+      /* backdrop-filter makes this a stacking context; lift it (and the
+         Export menu inside it) above the content area. */
+      z-index: 50;
     }
 
     #title-text {
