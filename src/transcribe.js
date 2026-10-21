@@ -5,6 +5,7 @@ const path = require('path');
 const os = require('os');
 const { app } = require('electron');
 const { MODEL_FILES, buildWhisperArgs } = require('./whisper-args');
+const { createPeakAccumulator } = require('./peaks');
 
 // ffmpeg-static ships a pre-built static binary so users don't need to install
 // ffmpeg separately. In a packaged app the binary lives in app.asar.unpacked
@@ -303,6 +304,8 @@ function convertToWav(inputPath, startSec, endSec, signal) {
 
 // Decode audio to raw PCM and bucket it into per-bucket peak amplitudes for
 // a waveform preview. Returns { peaks: number[0..1], duration: seconds }.
+// Peaks are computed as the PCM streams in, so long files don't have to be
+// held in memory.
 function computePeaksFromLocalFile(filePath, bucketCount) {
   const sampleRate = 8000;
   const args = ['-nostats', '-loglevel', 'error', '-vn', '-i', filePath,
@@ -310,34 +313,15 @@ function computePeaksFromLocalFile(filePath, bucketCount) {
 
   return new Promise((resolve, reject) => {
     const proc = spawn(getFfmpegPath(), args, { env: process.env });
-    const chunks = [];
-    proc.stdout.on('data', (d) => chunks.push(d));
+    const acc = createPeakAccumulator({ sampleRate });
+    proc.stdout.on('data', (d) => acc.push(d));
     proc.on('error', (err) => reject(new Error(`ffmpeg error: ${err.message}`)));
     proc.on('close', (code) => {
       if (code !== 0) {
         reject(new Error('Could not read audio for waveform preview.'));
         return;
       }
-      const buf = Buffer.concat(chunks);
-      const sampleCount = Math.floor(buf.length / 2);
-      const duration = sampleCount / sampleRate;
-      // Int16Array view avoids per-sample readInt16LE() call overhead
-      // (matters for hour-long files: tens of millions of samples).
-      const samples = new Int16Array(buf.buffer, buf.byteOffset, sampleCount);
-      const buckets = Math.max(1, Math.min(bucketCount, sampleCount));
-      const samplesPerBucket = Math.max(1, Math.floor(sampleCount / buckets));
-      const peaks = new Array(buckets).fill(0);
-      for (let b = 0; b < buckets; b++) {
-        const start = b * samplesPerBucket;
-        const end = Math.min(sampleCount, start + samplesPerBucket);
-        let max = 0;
-        for (let i = start; i < end; i++) {
-          const v = Math.abs(samples[i]);
-          if (v > max) max = v;
-        }
-        peaks[b] = max / 32768;
-      }
-      resolve({ peaks, duration });
+      resolve(acc.finish(bucketCount));
     });
   });
 }
