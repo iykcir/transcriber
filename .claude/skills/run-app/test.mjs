@@ -36,16 +36,16 @@ await app.evaluate(({ webContents }, p) => {
   if (wc) wc.send('file-selected', p);
 }, SAMPLE);
 
-await page.waitForSelector('#transcribe-btn-area.visible', { timeout: 5_000 });
+await page.waitForSelector('body[data-state="loaded"]', { timeout: 5_000 });
 await page.screenshot({ path: `${SHOT_DIR}/02-file-loaded.png` });
 console.log('Screenshot: 02-file-loaded.png — file loaded, starting transcription…');
 
 // Click transcribe
 await page.evaluate(() => document.getElementById('transcribe-btn').click());
 
-// Wait for transcription to complete (transcript section becomes visible)
+// Wait for transcription to complete (app moves to the transcribed state)
 // Timeout generous because model download may happen first
-await page.waitForSelector('#transcript-section.visible', { timeout: 600_000 });
+await page.waitForSelector('body[data-state="transcribed"]', { timeout: 600_000 });
 await page.screenshot({ path: `${SHOT_DIR}/03-result.png` });
 console.log('Screenshot: 03-result.png');
 
@@ -55,10 +55,8 @@ console.log('\n── Transcript ───────────────�
 console.log(transcript);
 console.log('────────────────────────────────────────\n');
 
-// Verify export buttons are enabled
-const exportEnabled = await page.evaluate(() =>
-  !document.getElementById('btn-pdf').disabled);
-console.log('Export buttons enabled:', exportEnabled);
+// Verify the Export menu is offered once there's a transcript
+console.log('Export menu visible:', await page.isVisible('#export-btn'));
 
 await app.close();
 console.log('Done.');

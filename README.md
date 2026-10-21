@@ -7,10 +7,12 @@ A native-feeling macOS desktop app for offline audio and video transcription, po
 ### Input
 | Method | Details |
 |---|---|
-| Drag & drop or browse | Drop a file onto the window or use File → Open |
-| Record from microphone | Click **Record from microphone** to capture live audio |
-| Capture system audio | Click **Capture system audio** to record whatever is playing on your Mac (meetings, podcasts, videos) |
-| URL | Paste a direct link to audio or video and click **Load**; YouTube links are supported out of the box (the app manages its own `yt-dlp` binary, kept up to date automatically) |
+| Drag & drop or browse | Drop a file anywhere on the window, click the drop zone, or use File → Open (⌘O) |
+| Record from microphone | Click **Record mic** to capture live audio |
+| Capture system audio | Click **System audio** to record whatever is playing on your Mac (meetings, podcasts, videos) |
+| URL | Paste a direct link to audio or video and press Enter or click **Load**; YouTube links are supported out of the box (the app manages its own `yt-dlp` binary, kept up to date automatically) |
+
+Once something is loaded, the drop zone collapses into a slim bar showing the file name and size. Click **Change** to pick another file, or **×** to close it and get back to the record and link options.
 
 ### Supported formats
 Audio: MP3, M4A, WAV, OGG, WebM, FLAC  
@@ -33,6 +35,8 @@ Downloaded automatically on first use and cached in `~/Library/Application Suppo
 | Medium | 1.5 GB | Best quality |
 
 ### Transcription options
+**Model** and **Language** are chosen right next to the Transcribe button; whatever you pick is remembered as the default for next time. **Timestamps** and **Translate to English** live in Settings (⌘,).
+
 - **Language** — auto-detect or choose from 14 languages (English, Spanish, French, German, Italian, Portuguese, Dutch, Polish, Russian, Chinese, Japanese, Korean, Arabic, Hindi)
 - **Timestamps** — include `[HH:MM:SS → HH:MM:SS]` segment markers in the output
 - **Translate to English** — whisper transcribes audio in any language and outputs English text directly
@@ -41,12 +45,14 @@ Downloaded automatically on first use and cached in `~/Library/Application Suppo
 - **Translate to English** — translates any completed transcript to English via Google Translate without re-transcribing
 
 ### Export
-TXT · Markdown · DOCX (Word) · SRT (subtitles) · PDF
+From the **Export** menu in the title bar (⌘S): TXT · Markdown · DOCX (Word) · SRT (subtitles) · PDF
 
 ### Other
-- Progress bar shows file name and phase (fetching, preparing, transcribing)
+- The Transcribe button doubles as the progress bar, showing the phase (fetching, preparing, transcribing) and percentage
+- **Cancel** stops a running transcription immediately (a model download in progress finishes and is cached)
 - Model download progress shown on first use
-- Copy transcript to clipboard
+- Once transcribed, the waveform folds away so the transcript fills the window
+- Copy transcript to clipboard (⌘⇧C)
 - Light/dark mode (follows system)
 
 ## Requirements
@@ -66,6 +72,11 @@ npm install
 
 # Start in development mode
 npm start
+
+# Checks
+npm test          # unit tests (node:test)
+npm run typecheck # TypeScript --checkJs over src/
+npm run lint      # ESLint
 ```
 
 ## Build
@@ -81,15 +92,19 @@ npm run build
 1. Launch the app (`npm start` or install from DMG)
 2. Choose an input — drop a file, record, capture system audio, or paste a URL
 3. Optionally drag the waveform handles to trim to just the part you want, using the play/pause button to preview the selection
-4. Open **Settings** (⌘,) to choose a model, language, and other options
-5. Click **Transcribe**
+4. Pick a model and language next to the Transcribe button (Settings, ⌘,, holds timestamps and Whisper translation)
+5. Click **Transcribe** or press ⌘↩ — press **Cancel** to stop
 6. Edit the transcript if needed
-7. Use **Translate to English** to translate, or export via the toolbar
+7. Use **Translate to English** to translate, **Copy**, or save via **Export** (⌘S)
 
 ## Keyboard shortcuts
 
 | Action | Shortcut |
 |---|---|
 | Open audio/video file | ⌘O |
+| Transcribe | ⌘↩ |
+| Export menu | ⌘S (↑/↓ to choose, Enter to save) |
+| Copy transcript | ⌘⇧C |
+| Close Export menu / Settings | Esc |
 | Settings | ⌘, |
 | Quit | ⌘Q |
