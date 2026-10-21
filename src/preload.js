@@ -26,6 +26,8 @@ const api = {
   onFileSelected: (cb) => ipcRenderer.on('file-selected', (_, path) => cb(path)),
   onOpenSettings: (cb) => ipcRenderer.on('open-settings', () => cb()),
   onTranscriptionProgress: (cb) => ipcRenderer.on('transcription-progress', (_, pct) => cb(pct)),
+  onUpdateAvailable: (cb) => ipcRenderer.on('update-available', (_, info) => cb(info)),
+  openReleasePage: () => ipcRenderer.invoke('open-release-page'),
   onModelDownloadProgress: (cb) => ipcRenderer.on('model-download-progress', (_, pct) => cb(pct)),
 };
 

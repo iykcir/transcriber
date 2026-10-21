@@ -47,6 +47,8 @@ const settingsSave      = document.getElementById('settings-save');
 const settingsCancel    = document.getElementById('settings-cancel');
 const gearBtn           = document.getElementById('gear-btn');
 const toast             = document.getElementById('toast');
+const updateBtn         = document.getElementById('update-btn');
+const updateCheckToggle = /** @type {HTMLInputElement} */ (document.getElementById('update-check-toggle'));
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 let toastTimer;
@@ -702,6 +704,7 @@ async function openSettings() {
   const settings = await api.getSettings();
   timestampsToggle.checked = !!settings.timestamps;
   translateToggle.checked  = !!settings.translate;
+  updateCheckToggle.checked = settings.checkUpdates;
   settingsOverlay.classList.add('visible');
 }
 
@@ -720,6 +723,7 @@ settingsSave.addEventListener('click', async () => {
   await api.setSettings({
     timestamps: timestampsToggle.checked,
     translate:  translateToggle.checked,
+    checkUpdates: updateCheckToggle.checked,
   });
   closeSettings();
   showToast('Settings saved');
@@ -755,5 +759,13 @@ api.onFileSelected((filePath) => handleFile(filePath));
 api.onOpenSettings(() => openSettings());
 api.onTranscriptionProgress((pct) => setButtonProgress('transcribe', pct));
 api.onModelDownloadProgress((pct) => setButtonProgress('download', pct));
+
+// Main checks GitHub at launch; the app can't install updates itself (it
+// isn't code-signed), so this just links to the release page.
+api.onUpdateAvailable(({ version }) => {
+  updateBtn.textContent = `Update ${version} available`;
+  updateBtn.hidden = false;
+});
+updateBtn.addEventListener('click', () => api.openReleasePage());
 
 setState('empty');

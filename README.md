@@ -35,7 +35,7 @@ Downloaded automatically on first use and cached in `~/Library/Application Suppo
 | Medium | 1.5 GB | Best quality |
 
 ### Transcription options
-**Model** and **Language** are chosen right next to the Transcribe button; whatever you pick is remembered as the default for next time. **Timestamps** and **Translate to English** live in Settings (⌘,).
+**Model** and **Language** are chosen right next to the Transcribe button; whatever you pick is remembered as the default for next time. **Timestamps**, **Translate to English** and the launch-time update check live in Settings (⌘,).
 
 - **Language** — auto-detect or choose from 14 languages (English, Spanish, French, German, Italian, Portuguese, Dutch, Polish, Russian, Chinese, Japanese, Korean, Arabic, Hindi)
 - **Timestamps** — include `[HH:MM:SS → HH:MM:SS]` segment markers in the output
@@ -54,6 +54,7 @@ From the **Export** menu in the title bar (⌘S): TXT · Markdown · DOCX (Word)
 - Once transcribed, the waveform folds away so the transcript fills the window
 - Copy transcript to clipboard (⌘⇧C)
 - Light/dark mode (follows system)
+- **Update check** — on launch the app checks GitHub for a newer release and shows an **Update available** button in the title bar that opens the download page (turn it off in Settings)
 
 ## Requirements
 

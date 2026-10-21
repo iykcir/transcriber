@@ -10,6 +10,8 @@ const EXTRA_PATHS = ['/opt/homebrew/bin', '/opt/homebrew/sbin', '/usr/local/bin'
 process.env.PATH = [...EXTRA_PATHS, ...(process.env.PATH || '').split(':').filter(Boolean)].join(':');
 
 let mainWindow;
+// Newer release found by the launch-time check: { version, url } or null.
+let availableUpdate = null;
 
 const CONFIG_PATH = path.join(app.getPath('userData'), 'config.json');
 
@@ -49,6 +51,15 @@ function createWindow() {
   // The app is a single page; never let a stray file drop (or anything else)
   // navigate the window away from it.
   mainWindow.webContents.on('will-navigate', (e) => e.preventDefault());
+
+  // Once per launch, unless turned off in Settings. Failures are silent.
+  mainWindow.webContents.once('did-finish-load', async () => {
+    if (readConfig().checkUpdates === false) return;
+    const update = await require('./update-check').checkForUpdate(app.getVersion());
+    if (!update) return;
+    availableUpdate = update;
+    mainWindow?.webContents.send('update-available', { version: update.version });
+  });
 }
 
 function buildMenu() {
@@ -151,6 +162,7 @@ ipcMain.handle('get-settings', () => {
     timestamps: config.timestamps || false,
     model:      config.model      || 'base',
     translate:  config.translate  || false,
+    checkUpdates: config.checkUpdates !== false,
   };
 });
 
@@ -170,6 +182,11 @@ ipcMain.handle('transcribe', async (_, filePath, startSec, endSec) => {
     (pct) => mainWindow?.webContents.send('model-download-progress', pct),
     startSec ?? null, endSec ?? null,
   );
+});
+
+// Opens only the release page main itself found; the renderer can't pass a URL.
+ipcMain.handle('open-release-page', () => {
+  if (availableUpdate) shell.openExternal(availableUpdate.url);
 });
 
 ipcMain.handle('cancel-transcription', () => require('./transcribe').cancelTranscription());

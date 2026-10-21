@@ -118,6 +118,10 @@
     }
     .icon-btn:hover { background: var(--hover); color: var(--text); }
     .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; background: none; }
+    .icon-btn[hidden] { display: none; }
+
+    #update-btn { color: var(--accent); }
+    #update-btn:hover { background: var(--accent-soft); color: var(--accent); }
 
     /* ── Export menu ───────────────────────────────────────────────────── */
     .export-wrap { position: relative; display: none; }
@@ -689,6 +693,7 @@
 <div id="titlebar">
   <span id="title-text">Transcriber</span>
   <div class="titlebar-actions">
+    <button class="icon-btn" id="update-btn" hidden title="Open the release page to download the new version"></button>
     <div class="export-wrap">
       <button class="icon-btn" id="export-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="export-menu" title="Export (⌘S)">
         Export
@@ -826,6 +831,13 @@
       <label for="translate-toggle">Translate to English (Whisper)</label>
       <label class="toggle">
         <input type="checkbox" id="translate-toggle" />
+        <span class="toggle-slider"></span>
+      </label>
+    </div>
+    <div class="form-group toggle-group">
+      <label for="update-check-toggle">Check for updates on launch</label>
+      <label class="toggle">
+        <input type="checkbox" id="update-check-toggle" />
         <span class="toggle-slider"></span>
       </label>
     </div>
