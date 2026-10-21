@@ -12,16 +12,20 @@
       --surface: rgba(255,255,255,0.75);
       --surface-solid: #ffffff;
       --border: rgba(0,0,0,0.10);
+      --hover: rgba(0,0,0,0.05);
       --text: #1d1d1f;
       --text-secondary: #6e6e73;
       --accent: #007aff;
       --accent-hover: #0066d6;
+      --accent-soft: rgba(0,122,255,0.14);
       --danger: #ff3b30;
       --success: #34c759;
       --drop-bg: rgba(0,122,255,0.05);
       --drop-border: rgba(0,122,255,0.4);
       --toolbar-bg: rgba(245,245,247,0.9);
       --shadow: 0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06);
+      --focus-ring: 0 0 0 3px rgba(0,122,255,0.35);
+      --ease: 150ms ease;
     }
 
     @media (prefers-color-scheme: dark) {
@@ -30,8 +34,10 @@
         --surface: rgba(44,44,46,0.8);
         --surface-solid: #2c2c2e;
         --border: rgba(255,255,255,0.10);
+        --hover: rgba(255,255,255,0.07);
         --text: #f5f5f7;
         --text-secondary: #98989d;
+        --accent-soft: rgba(10,132,255,0.22);
         --drop-bg: rgba(0,122,255,0.08);
         --drop-border: rgba(0,122,255,0.5);
         --toolbar-bg: rgba(28,28,30,0.9);
@@ -39,57 +45,113 @@
       }
     }
 
+    @media (prefers-reduced-motion: reduce) {
+      :root { --ease: 0s; }
+      *, *::before, *::after { animation-duration: 0s !important; transition-duration: 0s !important; }
+    }
+
     html, body {
       height: 100%;
       font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
       background: var(--bg);
       color: var(--text);
-      font-size: 14px;
+      font-size: 13px;
       -webkit-font-smoothing: antialiased;
       user-select: none;
     }
 
+    button, select, input, textarea { font-family: inherit; font-size: inherit; color: inherit; }
+    button { -webkit-app-region: no-drag; }
+    :focus { outline: none; }
+    :focus-visible { box-shadow: var(--focus-ring); }
+
+    /* ── Title bar ─────────────────────────────────────────────────────── */
     #titlebar {
       height: 38px;
       -webkit-app-region: drag;
       display: flex;
       align-items: center;
-      padding: 0 16px;
+      /* Leave room for the inset traffic lights on the left. */
+      padding: 0 10px 0 80px;
       background: var(--toolbar-bg);
       backdrop-filter: blur(20px);
       border-bottom: 1px solid var(--border);
       position: relative;
     }
 
-    #titlebar .title {
+    #title-text {
       position: absolute;
       left: 50%;
       transform: translateX(-50%);
+      max-width: calc(100% - 340px);
       font-size: 13px;
       font-weight: 600;
       color: var(--text-secondary);
-      letter-spacing: 0.01em;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
-    #titlebar .gear-btn {
-      -webkit-app-region: no-drag;
+    .titlebar-actions {
       margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .icon-btn {
       background: none;
       border: none;
       cursor: pointer;
       color: var(--text-secondary);
-      padding: 4px;
+      height: 26px;
+      padding: 0 6px;
       border-radius: 6px;
-      display: flex;
+      display: inline-flex;
       align-items: center;
-      transition: background 0.15s, color 0.15s;
+      gap: 4px;
+      font-weight: 500;
+      transition: background var(--ease), color var(--ease);
     }
+    .icon-btn:hover { background: var(--hover); color: var(--text); }
+    .icon-btn:disabled { opacity: 0.4; cursor: not-allowed; background: none; }
 
-    #titlebar .gear-btn:hover {
-      background: var(--border);
+    /* ── Export menu ───────────────────────────────────────────────────── */
+    .export-wrap { position: relative; display: none; }
+    body[data-state="transcribed"] .export-wrap { display: block; }
+
+    #export-menu {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      min-width: 170px;
+      padding: 4px;
+      background: var(--surface-solid);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      box-shadow: var(--shadow), 0 12px 32px rgba(0,0,0,0.18);
+      z-index: 150;
+      display: flex;
+      flex-direction: column;
+    }
+    #export-menu[hidden] { display: none; }
+
+    #export-menu button {
+      background: none;
+      border: none;
+      text-align: left;
+      padding: 6px 10px;
+      border-radius: 5px;
+      cursor: pointer;
       color: var(--text);
     }
+    #export-menu button:hover, #export-menu button:focus-visible {
+      background: var(--accent);
+      color: #fff;
+      box-shadow: none;
+    }
 
+    /* ── Layout & states ───────────────────────────────────────────────── */
     #app {
       display: flex;
       flex-direction: column;
@@ -98,30 +160,43 @@
 
     #main {
       flex: 1;
+      min-height: 0;
       overflow-y: auto;
       overflow-x: hidden;
       display: flex;
       flex-direction: column;
-      padding: 20px;
-      gap: 16px;
+      padding: 16px 20px 20px;
+      gap: 12px;
     }
 
-    /* Drop zone */
+    /* Regions hidden unless their state shows them. */
+    #action-row, #transcript-section, #input-row { display: none; }
+    body[data-state="empty"] #input-row { display: flex; }
+    body[data-state="loaded"] #action-row,
+    body[data-state="transcribing"] #action-row { display: flex; }
+    body[data-state="transcribed"] #transcript-section { display: flex; }
+    body[data-state="empty"] #waveform-section,
+    body[data-state="recording"] #waveform-section { display: none !important; }
+
+    #main > * { animation: fade-in var(--ease); }
+    @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+    /* ── Drop zone / source bar ────────────────────────────────────────── */
     #dropzone {
-      border: 2px dashed var(--border);
-      border-radius: 16px;
+      border: 1.5px dashed var(--border);
+      border-radius: 14px;
       background: var(--surface);
       backdrop-filter: blur(10px);
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      gap: 12px;
-      padding: 32px;
+      gap: 20px;
+      padding: 28px 24px;
       cursor: pointer;
-      transition: border-color 0.2s, background 0.2s, transform 0.1s;
-      min-height: 180px;
-      flex-shrink: 0;
+      transition: border-color var(--ease), background var(--ease);
+      flex: 1;
+      min-height: 220px;
     }
 
     #dropzone:hover, #dropzone.hover {
@@ -129,135 +204,131 @@
       background: var(--drop-bg);
     }
 
-    #dropzone.hover {
-      transform: scale(1.01);
-    }
-
-    #dropzone.has-file {
-      min-height: 80px;
-      padding: 16px 32px;
-      flex-direction: row;
-      gap: 16px;
-    }
-
-    #dropzone .mic-icon {
-      color: var(--accent);
-      flex-shrink: 0;
-    }
-
-    #dropzone .drop-text {
+    #dropzone-content {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
       text-align: center;
     }
 
+    #dropzone .mic-icon { color: var(--accent); flex-shrink: 0; }
+
     #dropzone .drop-title {
-      font-size: 16px;
+      font-size: 15px;
       font-weight: 600;
-      color: var(--text);
       margin-bottom: 4px;
     }
 
     #dropzone .drop-sub {
-      font-size: 13px;
+      font-size: 11px;
       color: var(--text-secondary);
+    }
+
+    /* Loaded file: collapses to a slim source bar. */
+    #dropzone.has-file {
+      flex: none;
+      min-height: 0;
+      height: 44px;
+      padding: 0 6px 0 12px;
+      border: none;
+      border-radius: 10px;
+      background: var(--hover);
+      flex-direction: row;
+    }
+    #dropzone.has-file:hover, #dropzone.has-file.hover {
+      background: var(--drop-bg);
+      box-shadow: inset 0 0 0 1.5px var(--drop-border);
+    }
+
+    #dropzone.has-file #dropzone-content {
+      flex-direction: row;
+      gap: 10px;
+      width: 100%;
+      min-width: 0;
+      text-align: left;
     }
 
     #dropzone .file-info {
       flex: 1;
       min-width: 0;
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
     }
 
     #dropzone .file-name {
       font-size: 15px;
       font-weight: 600;
-      color: var(--text);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      min-width: 0;
     }
 
     #dropzone .file-meta {
-      font-size: 12px;
+      font-size: 11px;
       color: var(--text-secondary);
-      margin-top: 2px;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
 
-    #input-options {
-      display: flex;
-      flex-direction: column;
+    #source-change { flex-shrink: 0; }
+
+    body[data-state="transcribing"] #dropzone { pointer-events: none; opacity: 0.6; }
+
+    /* Recording, mic and system audio, URL — inside the empty drop zone. */
+    #input-row {
       align-items: center;
-      gap: 10px;
-      margin-top: -4px;
-    }
-    #input-options.hidden { display: none; }
-
-    .input-divider {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      width: 100%;
-      color: var(--text-secondary);
-      font-size: 12px;
-    }
-    .input-divider::before, .input-divider::after {
-      content: '';
-      flex: 1;
-      height: 1px;
-      background: var(--border);
-    }
-
-    .input-buttons {
-      display: flex;
       gap: 8px;
       flex-wrap: wrap;
       justify-content: center;
+      cursor: default;
     }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      height: 28px;
+      padding: 0 12px;
+      border-radius: 14px;
+      border: none;
+      background: var(--hover);
+      font-weight: 500;
+      cursor: pointer;
+      transition: background var(--ease), color var(--ease);
+    }
+    .chip:hover { background: var(--border); }
+    .chip .rec-glyph { color: var(--danger); }
 
     .url-row {
       display: flex;
-      gap: 8px;
-      width: 100%;
+      align-items: center;
+      height: 28px;
+      border-radius: 14px;
+      background: var(--hover);
+      padding: 0 3px 0 12px;
+      width: 260px;
+      transition: box-shadow var(--ease);
     }
+    .url-row:focus-within { box-shadow: var(--focus-ring); }
     .url-row input {
       flex: 1;
-      padding: 8px 12px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: var(--bg);
-      color: var(--text);
-      font-size: 13px;
-      font-family: inherit;
+      min-width: 0;
+      border: none;
+      background: none;
       outline: none;
-      transition: border-color 0.15s, box-shadow 0.15s;
+      user-select: text;
     }
-    .url-row input:focus {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(0,122,255,0.15);
-    }
+    .url-row input:focus-visible { box-shadow: none; }
+    .url-row .icon-btn { height: 22px; border-radius: 11px; }
 
-    .btn-record {
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      background: transparent;
-      border: 1px solid var(--border);
-      border-radius: 20px;
-      padding: 7px 16px;
-      font-size: 13px;
-      font-weight: 500;
-      color: var(--text);
-      cursor: pointer;
-      font-family: inherit;
-      transition: background 0.15s, border-color 0.15s, color 0.15s;
-      -webkit-app-region: no-drag;
-    }
-    .btn-record svg { color: #ff3b30; flex-shrink: 0; }
-    .btn-record:hover { background: var(--bg); border-color: #ff3b30; color: #ff3b30; }
-
-    /* Recording state (injected into dropzone) */
+    /* Recording state (injected into #dropzone-content) */
     .rec-state { display: flex; align-items: center; gap: 12px; }
     .rec-dot {
-      width: 14px; height: 14px; border-radius: 50%;
-      background: #ff3b30;
+      width: 12px; height: 12px; border-radius: 50%;
+      background: var(--danger);
       animation: rec-pulse 1.2s ease-in-out infinite;
       flex-shrink: 0;
     }
@@ -267,341 +338,57 @@
     }
     .rec-timer {
       font-size: 28px; font-weight: 300;
-      color: var(--text); font-variant-numeric: tabular-nums;
+      font-variant-numeric: tabular-nums;
       letter-spacing: 0.03em;
     }
-    .rec-label { font-size: 13px; color: var(--text-secondary); }
+    .rec-label { color: var(--text-secondary); }
     .rec-buttons { display: flex; gap: 8px; margin-top: 4px; }
 
+    /* ── Buttons ───────────────────────────────────────────────────────── */
     .btn-primary {
+      position: relative;
+      overflow: hidden;
       background: var(--accent);
       color: #fff;
       border: none;
       border-radius: 8px;
-      padding: 8px 18px;
-      font-size: 14px;
-      font-weight: 500;
+      height: 30px;
+      padding: 0 16px;
+      font-weight: 600;
       cursor: pointer;
-      transition: background 0.15s, transform 0.1s;
-      font-family: inherit;
-      -webkit-app-region: no-drag;
+      transition: background var(--ease);
     }
-
     .btn-primary:hover { background: var(--accent-hover); }
-    .btn-primary:active { transform: scale(0.97); }
-    .btn-primary:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-      transform: none;
-    }
+    .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    .btn-secondary {
-      background: var(--surface-solid);
-      color: var(--text);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 7px 16px;
-      font-size: 13px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background 0.15s, transform 0.1s;
-      font-family: inherit;
-      -webkit-app-region: no-drag;
-    }
-
-    .btn-secondary:hover { background: var(--bg); }
-    .btn-secondary:active { transform: scale(0.97); }
-    .btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
-
-    /* Status area */
-    #status-area {
-      display: none;
-      align-items: center;
-      gap: 12px;
-      padding: 12px 16px;
-      background: var(--surface);
-      border-radius: 10px;
-      border: 1px solid var(--border);
-    }
-
-    #status-area.visible { display: flex; }
-
-    .spinner {
-      width: 18px;
-      height: 18px;
-      border: 2px solid var(--border);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      flex-shrink: 0;
-    }
-
-    @keyframes spin { to { transform: rotate(360deg); } }
-
-    .status-icon { flex-shrink: 0; }
-    #status-text { font-size: 13px; color: var(--text-secondary); flex: 1; user-select: text; cursor: text; }
-
-    /* Transcript area */
-    #transcript-section {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      min-height: 160px;
-      display: none;
-    }
-
-    #transcript-section.visible { display: flex; }
-
-    #transcript-label {
-      font-size: 11px;
-      font-weight: 600;
-      color: var(--text-secondary);
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      margin-bottom: 8px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    #transcript-label .label-spacer { flex: 1; }
-    #btn-translate {
-      text-transform: none;
-      letter-spacing: normal;
-      font-size: 12px;
-      padding: 3px 10px;
+    .btn-ghost {
+      background: none;
+      border: none;
       border-radius: 6px;
-    }
-    .settings-divider { height: 1px; background: var(--border); margin: 8px 0 16px; }
-
-    #transcript {
-      flex: 1;
-      min-height: 0;
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 16px;
-      background: var(--surface-solid);
-      font-family: 'Georgia', 'Times New Roman', serif;
-      font-size: 14px;
-      line-height: 1.7;
-      color: var(--text);
-      resize: none;
-      outline: none;
-      overflow-y: auto;
-      -webkit-app-region: no-drag;
-      user-select: text;
-    }
-
-    #transcript:focus {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(0,122,255,0.15);
-    }
-
-    /* Toolbar */
-    #toolbar {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 12px 20px;
-      background: var(--toolbar-bg);
-      backdrop-filter: blur(20px);
-      border-top: 1px solid var(--border);
-      flex-shrink: 0;
-    }
-
-    #toolbar .spacer { flex: 1; }
-    .export-group { display: flex; align-items: center; gap: 6px; }
-    .export-label { font-size: 12px; color: var(--text-secondary); margin-right: 2px; }
-
-    /* Settings modal */
-    #settings-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.4);
-      backdrop-filter: blur(4px);
-      z-index: 100;
-      align-items: center;
-      justify-content: center;
-    }
-
-    #settings-overlay.visible { display: flex; }
-
-    #settings-panel {
-      background: var(--surface-solid);
-      border-radius: 16px;
-      padding: 24px;
-      width: 420px;
-      box-shadow: var(--shadow), 0 20px 60px rgba(0,0,0,0.2);
-      border: 1px solid var(--border);
-    }
-
-    #settings-panel h2 {
-      font-size: 18px;
-      font-weight: 700;
-      margin-bottom: 20px;
-    }
-
-    .form-group {
-      margin-bottom: 16px;
-    }
-
-    .form-group label {
-      display: block;
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text-secondary);
-      margin-bottom: 6px;
-    }
-
-    .form-group input[type="text"],
-    .form-group input[type="password"],
-    .form-group select {
-      width: 100%;
-      padding: 8px 12px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: var(--bg);
-      color: var(--text);
-      font-size: 14px;
-      font-family: inherit;
-      outline: none;
-      transition: border-color 0.15s, box-shadow 0.15s;
-    }
-
-    .form-group input:focus,
-    .form-group select:focus {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(0,122,255,0.15);
-    }
-
-    .form-group.toggle-group {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
-    .form-group.toggle-group label { margin: 0; }
-
-    .toggle {
-      position: relative;
-      width: 44px;
-      height: 24px;
-    }
-
-    .toggle input { opacity: 0; width: 0; height: 0; }
-
-    .toggle-slider {
-      position: absolute;
-      inset: 0;
-      border-radius: 12px;
-      background: var(--border);
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-
-    .toggle-slider::before {
-      content: '';
-      position: absolute;
-      width: 18px;
-      height: 18px;
-      left: 3px;
-      top: 3px;
-      border-radius: 50%;
-      background: white;
-      transition: transform 0.2s;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-    }
-
-    .toggle input:checked + .toggle-slider { background: var(--accent); }
-    .toggle input:checked + .toggle-slider::before { transform: translateX(20px); }
-
-    .settings-footer {
-      display: flex;
-      justify-content: flex-end;
-      gap: 8px;
-      margin-top: 24px;
-    }
-
-    /* Progress bar */
-    #progress-bar-wrap {
-      display: none;
-      flex-direction: column;
-      gap: 6px;
-      flex: 1;
-    }
-    #progress-bar-wrap.visible { display: flex; }
-    #progress-track {
-      height: 5px;
-      background: var(--border);
-      border-radius: 3px;
-      overflow: hidden;
-    }
-    #progress-fill {
-      height: 100%;
-      width: 0%;
-      background: var(--accent);
-      border-radius: 3px;
-      transition: width 0.3s ease;
-    }
-    #progress-label {
-      font-size: 11px;
-      color: var(--text-secondary);
-    }
-
-    /* Notifications */
-    #toast {
-      position: fixed;
-      bottom: 70px;
-      left: 50%;
-      transform: translateX(-50%) translateY(20px);
-      background: rgba(40,40,40,0.95);
-      color: #fff;
-      padding: 10px 20px;
-      border-radius: 20px;
-      font-size: 13px;
+      height: 26px;
+      padding: 0 10px;
       font-weight: 500;
-      opacity: 0;
-      transition: opacity 0.2s, transform 0.2s;
-      pointer-events: none;
-      z-index: 200;
-      backdrop-filter: blur(8px);
-      white-space: nowrap;
+      color: var(--text);
+      cursor: pointer;
+      transition: background var(--ease);
     }
+    .btn-ghost:hover { background: var(--hover); }
+    .btn-ghost:disabled { opacity: 0.4; cursor: not-allowed; background: none; }
 
-    #toast.show {
-      opacity: 1;
-      transform: translateX(-50%) translateY(0);
-    }
-
-    .char-count {
+    kbd {
+      font-family: inherit;
       font-size: 11px;
-      color: var(--text-secondary);
-      text-align: right;
-      margin-top: 4px;
+      opacity: 0.7;
+      margin-left: 6px;
     }
 
-    #transcribe-btn-area {
-      display: none;
-      justify-content: center;
-      flex-shrink: 0;
-    }
-
-    #transcribe-btn-area.visible { display: flex; }
-
-    #transcribe-btn {
-      padding: 10px 28px;
-      font-size: 15px;
-      border-radius: 10px;
-    }
-
-    /* Waveform trim */
+    /* ── Waveform trim ─────────────────────────────────────────────────── */
     #waveform-section {
       display: none;
       flex-direction: column;
       gap: 6px;
       flex-shrink: 0;
     }
-
     #waveform-section.visible { display: flex; }
 
     #preview-video {
@@ -612,40 +399,32 @@
       background: #000;
       object-fit: contain;
     }
-
     #preview-video.visible { display: block; }
 
-    #waveform-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
+    #waveform-row { display: flex; align-items: center; gap: 8px; }
 
     #waveform-wrap {
       position: relative;
       flex: 1;
-      height: 64px;
+      height: 56px;
       -webkit-app-region: no-drag;
+      transition: height var(--ease);
     }
 
     #waveform-play-btn {
       flex-shrink: 0;
-      width: 28px;
-      height: 28px;
+      width: 26px;
+      height: 26px;
       border-radius: 50%;
-      border: 1px solid var(--border);
-      background: var(--surface);
-      color: var(--text);
+      border: none;
+      background: var(--hover);
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      -webkit-app-region: no-drag;
     }
-
     #waveform-play-btn:hover { background: var(--border); }
     #waveform-play-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-
     #waveform-play-icon { margin-left: 1px; }
 
     /* Visual clipping (rounded corners) lives on this inner layer so it
@@ -653,9 +432,7 @@
     #waveform-clip {
       position: absolute;
       inset: 0;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 10px;
+      border-radius: 8px;
       overflow: hidden;
     }
 
@@ -670,9 +447,7 @@
       position: absolute;
       top: 0;
       bottom: 0;
-      background: rgba(0,122,255,0.15);
-      border-left: 2px solid var(--accent);
-      border-right: 2px solid var(--accent);
+      background: var(--accent-soft);
       pointer-events: none;
     }
 
@@ -687,11 +462,10 @@
       align-items: center;
       justify-content: center;
     }
-
     .waveform-handle::before {
       content: '';
-      width: 4px;
-      height: 28px;
+      width: 3px;
+      height: 100%;
       background: var(--accent);
       border-radius: 2px;
     }
@@ -703,62 +477,271 @@
       color: var(--text-secondary);
       font-variant-numeric: tabular-nums;
     }
+
+    body[data-state="transcribing"] .waveform-handle { pointer-events: none; opacity: 0.5; }
+
+    /* Transcribed: fold the waveform into a thin strip. */
+    body[data-state="transcribed"] #waveform-wrap { height: 16px; }
+    body[data-state="transcribed"] .waveform-handle,
+    body[data-state="transcribed"] #waveform-times,
+    body[data-state="transcribed"] #preview-video { display: none; }
+
+    /* ── Action row ────────────────────────────────────────────────────── */
+    #action-row {
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+    #action-row .spacer { flex: 1; }
+
+    .picker {
+      height: 26px;
+      padding: 0 26px 0 12px;
+      border-radius: 13px;
+      border: none;
+      background: var(--hover) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%2398989d' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 10px center;
+      -webkit-appearance: none;
+      appearance: none;
+      font-weight: 500;
+      cursor: pointer;
+      max-width: 200px;
+    }
+    .picker:hover { background-color: var(--border); }
+    body[data-state="transcribing"] .picker { pointer-events: none; opacity: 0.5; }
+
+    #transcribe-btn { min-width: 150px; }
+    #transcribe-fill {
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 0;
+      background: rgba(255,255,255,0.22);
+      transition: width 0.3s ease;
+      pointer-events: none;
+    }
+    #transcribe-label { position: relative; font-variant-numeric: tabular-nums; }
+    body[data-state="transcribing"] #transcribe-btn { cursor: default; }
+
+    #cancel-btn { display: none; }
+    body[data-state="transcribing"] #cancel-btn { display: inline-block; }
+
+    #inline-error {
+      font-size: 12px;
+      color: var(--danger);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      user-select: text;
+      cursor: text;
+      flex-shrink: 0;
+    }
+    #inline-error:empty { display: none; }
+
+    /* ── Transcript ────────────────────────────────────────────────────── */
+    #transcript-section {
+      flex: 1;
+      min-height: 160px;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    #transcript {
+      flex: 1;
+      min-height: 0;
+      border: none;
+      border-top: 1px solid var(--border);
+      padding: 14px 2px;
+      background: none;
+      font-family: 'Georgia', 'Times New Roman', serif;
+      font-size: 15px;
+      line-height: 1.7;
+      resize: none;
+      outline: none;
+      overflow-y: auto;
+      -webkit-app-region: no-drag;
+      user-select: text;
+    }
+    #transcript:focus-visible { box-shadow: none; }
+
+    #transcript-footer {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    #transcript-footer .spacer { flex: 1; }
+
+    .char-count {
+      font-size: 11px;
+      color: var(--text-secondary);
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ── Settings modal ────────────────────────────────────────────────── */
+    #settings-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.35);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    #settings-overlay.visible { display: flex; }
+
+    #settings-panel {
+      background: var(--surface-solid);
+      border-radius: 14px;
+      padding: 20px;
+      width: 380px;
+      box-shadow: var(--shadow), 0 20px 60px rgba(0,0,0,0.2);
+      border: 1px solid var(--border);
+    }
+
+    #settings-panel h2 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 16px;
+    }
+
+    .form-group { margin-bottom: 14px; }
+
+    .form-group.toggle-group {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .settings-note {
+      font-size: 11px;
+      color: var(--text-secondary);
+      padding-top: 12px;
+      border-top: 1px solid var(--border);
+    }
+
+    .toggle { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute;
+      inset: 0;
+      border-radius: 11px;
+      background: var(--border);
+      cursor: pointer;
+      transition: background var(--ease);
+    }
+    .toggle-slider::before {
+      content: '';
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      left: 2px;
+      top: 2px;
+      border-radius: 50%;
+      background: white;
+      transition: transform var(--ease);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    }
+    .toggle input:checked + .toggle-slider { background: var(--accent); }
+    .toggle input:checked + .toggle-slider::before { transform: translateX(16px); }
+    .toggle input:focus-visible + .toggle-slider { box-shadow: var(--focus-ring); }
+
+    .settings-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 20px;
+    }
+
+    /* ── Toast ─────────────────────────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: rgba(40,40,40,0.95);
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 16px;
+      font-weight: 500;
+      opacity: 0;
+      transition: opacity 0.2s, transform 0.2s;
+      pointer-events: none;
+      z-index: 200;
+      backdrop-filter: blur(8px);
+      white-space: nowrap;
+    }
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
   </style>
 </head>
-<body>
-
+<body data-state="empty">
 <div id="titlebar">
-  <span class="title">Transcriber</span>
-  <button class="gear-btn" id="gear-btn" title="Settings">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="12" cy="12" r="3"/>
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-    </svg>
-  </button>
+  <span id="title-text">Transcriber</span>
+  <div class="titlebar-actions">
+    <div class="export-wrap">
+      <button class="icon-btn" id="export-btn" aria-haspopup="menu" aria-expanded="false" aria-controls="export-menu" title="Export (⌘S)">
+        Export
+        <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1 1l4 4 4-4"/></svg>
+      </button>
+      <div id="export-menu" role="menu" hidden>
+        <button role="menuitem" id="btn-txt">TXT</button>
+        <button role="menuitem" id="btn-md">Markdown</button>
+        <button role="menuitem" id="btn-docx">Word (.docx)</button>
+        <button role="menuitem" id="btn-srt">SRT subtitles</button>
+        <button role="menuitem" id="btn-pdf">PDF</button>
+      </div>
+    </div>
+    <button class="icon-btn" id="gear-btn" title="Settings" aria-label="Settings">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </button>
+  </div>
 </div>
-
 <div id="app">
   <div id="main">
-    <!-- Drop zone -->
+    <!-- Drop zone; collapses to the source bar once media is loaded -->
     <div id="dropzone">
-      <svg class="mic-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-        <line x1="12" y1="19" x2="12" y2="23"/>
-        <line x1="8" y1="23" x2="16" y2="23"/>
-      </svg>
-      <div class="drop-text">
-        <div class="drop-title">Drop an audio or video file, or click to browse</div>
-        <div class="drop-sub">MP3, MP4, M4A, WAV, MOV, MKV, FLAC and more</div>
+      <!-- Only this part's innerHTML is ever replaced (file / recording UI) -->
+      <div id="dropzone-content">
+        <svg class="mic-icon" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+          <line x1="12" y1="19" x2="12" y2="23"/>
+          <line x1="8" y1="23" x2="16" y2="23"/>
+        </svg>
+        <div class="drop-text">
+          <div class="drop-title">Drop audio or video, or click to browse</div>
+          <div class="drop-sub">MP3, MP4, M4A, WAV, MOV, MKV, FLAC and more</div>
+        </div>
+      </div>
+      <!-- Permanent — never replaced, so its listeners survive -->
+      <div id="input-row">
+        <button class="chip" id="record-btn">
+          <svg class="rec-glyph" width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="9"/></svg>
+          Record mic
+        </button>
+        <button class="chip" id="system-audio-btn">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><polyline points="8 21 12 17 16 21"/></svg>
+          System audio
+        </button>
+        <div class="url-row">
+          <input type="url" id="url-input" placeholder="Paste a link…" aria-label="Audio or video link" />
+          <button class="icon-btn" id="url-load-btn">Load</button>
+        </div>
       </div>
     </div>
-
-    <!-- Permanent input options — never replaced by handleFile -->
-    <div id="input-options">
-      <div class="input-divider"><span>or</span></div>
-      <div class="input-buttons">
-        <button class="btn-record" id="record-btn">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="8"/></svg>
-          Record from microphone
-        </button>
-        <button class="btn-record" id="system-audio-btn">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><polyline points="8 21 12 17 16 21"/></svg>
-          Capture system audio
-        </button>
-      </div>
-      <div class="url-row">
-        <input type="url" id="url-input" placeholder="Paste a link to audio or video…" />
-        <button class="btn-secondary" id="url-load-btn">Load</button>
-      </div>
-    </div>
-
     <!-- Waveform trim -->
     <div id="waveform-section">
       <video id="preview-video"></video>
       <div id="waveform-row">
         <button id="waveform-play-btn" title="Preview selection" aria-label="Play/pause preview" disabled>
-          <svg id="waveform-play-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20"/></svg>
-          <svg id="waveform-pause-icon" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="5" y="4" width="5" height="16"/><rect x="14" y="4" width="5" height="16"/></svg>
+          <svg id="waveform-play-icon" width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 4 20 12 6 20"/></svg>
+          <svg id="waveform-pause-icon" width="10" height="10" viewBox="0 0 24 24" fill="currentColor" style="display:none"><rect x="5" y="4" width="5" height="16"/><rect x="14" y="4" width="5" height="16"/></svg>
         </button>
         <div id="waveform-wrap">
           <div id="waveform-clip">
@@ -775,75 +758,15 @@
         <span id="trim-end-label">0:00</span>
       </div>
     </div>
-
-    <!-- Transcribe button -->
-    <div id="transcribe-btn-area">
-      <button class="btn-primary" id="transcribe-btn">Transcribe</button>
-    </div>
-
-    <!-- Status -->
-    <div id="status-area">
-      <div class="spinner" id="status-spinner"></div>
-      <svg class="status-icon" id="status-icon-ok" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#34c759" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:none">
-        <polyline points="20 6 9 17 4 12"/>
-      </svg>
-      <svg class="status-icon" id="status-icon-err" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ff3b30" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="display:none">
-        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-      </svg>
-      <div id="progress-bar-wrap">
-        <div id="progress-track"><div id="progress-fill"></div></div>
-        <span id="progress-label">0%</span>
-      </div>
-      <span id="status-text">Transcribing…</span>
-    </div>
-
-    <!-- Transcript -->
-    <div id="transcript-section">
-      <div id="transcript-label">
-        Transcript <span id="char-count" class="char-count"></span>
-        <span class="label-spacer"></span>
-        <button class="btn-secondary" id="btn-translate" style="display:none">Translate to English</button>
-      </div>
-      <textarea id="transcript" spellcheck="true" placeholder="Your transcript will appear here…"></textarea>
-    </div>
-  </div>
-
-  <!-- Bottom toolbar -->
-  <div id="toolbar">
-    <button class="btn-secondary" id="btn-copy" disabled>Copy</button>
-    <div class="spacer"></div>
-    <div class="export-group">
-      <span class="export-label">Save as</span>
-      <button class="btn-secondary" id="btn-txt"  disabled title="Plain text">TXT</button>
-      <button class="btn-secondary" id="btn-md"   disabled title="Markdown">MD</button>
-      <button class="btn-secondary" id="btn-docx" disabled title="Word document">DOCX</button>
-      <button class="btn-secondary" id="btn-srt"  disabled title="SubRip subtitles">SRT</button>
-      <button class="btn-secondary" id="btn-pdf"  disabled title="PDF document">PDF</button>
-    </div>
-  </div>
-</div>
-
-<!-- Settings modal -->
-<div id="settings-overlay">
-  <div id="settings-panel">
-    <h2>Settings</h2>
-
-    <div class="form-group">
-      <label>Whisper Model</label>
-      <select id="model-select">
-        <option value="tiny">Tiny (75 MB) — fastest</option>
-        <option value="base" selected>Base (142 MB) — recommended</option>
-        <option value="small">Small (466 MB) — more accurate</option>
-        <option value="medium">Medium (1.5 GB) — best quality</option>
+    <!-- Per-run options + Transcribe -->
+    <div id="action-row">
+      <select class="picker" id="model-select" title="Whisper model (downloaded on first use)" aria-label="Model">
+        <option value="tiny">Tiny · fastest</option>
+        <option value="base" selected>Base · recommended</option>
+        <option value="small">Small · more accurate</option>
+        <option value="medium">Medium · best quality</option>
       </select>
-      <div style="font-size:11px;color:var(--text-secondary);margin-top:5px;">
-        Model is downloaded on first use and cached locally.
-      </div>
-    </div>
-
-    <div class="form-group">
-      <label>Language</label>
-      <select id="language-select">
+      <select class="picker" id="language-select" title="Spoken language" aria-label="Language">
         <option value="auto">Auto-detect</option>
         <option value="en">English</option>
         <option value="es">Spanish</option>
@@ -860,36 +783,56 @@
         <option value="ar">Arabic</option>
         <option value="hi">Hindi</option>
       </select>
+      <div class="spacer"></div>
+      <button class="btn-ghost" id="cancel-btn">Cancel</button>
+      <button class="btn-primary" id="transcribe-btn">
+        <span id="transcribe-fill"></span>
+        <span id="transcribe-label">Transcribe<kbd>⌘↩</kbd></span>
+      </button>
     </div>
-
+    <div id="inline-error" role="alert"></div>
+    <!-- Transcript -->
+    <div id="transcript-section">
+      <textarea id="transcript" spellcheck="true" placeholder="Your transcript will appear here…"></textarea>
+      <div id="transcript-footer">
+        <span id="char-count" class="char-count"></span>
+        <div class="spacer"></div>
+        <button class="btn-ghost" id="btn-translate" style="display:none">Translate to English</button>
+        <button class="btn-ghost" id="btn-copy" title="Copy (⌘⇧C)">Copy</button>
+      </div>
+    </div>
+  </div>
+</div>
+<!-- Settings modal -->
+<div id="settings-overlay">
+  <div id="settings-panel" role="dialog" aria-labelledby="settings-title">
+    <h2 id="settings-title">Settings</h2>
     <div class="form-group toggle-group">
-      <label>Include timestamps in output</label>
+      <label for="timestamps-toggle">Include timestamps in output</label>
       <label class="toggle">
         <input type="checkbox" id="timestamps-toggle" />
         <span class="toggle-slider"></span>
       </label>
     </div>
-
     <div class="form-group toggle-group">
-      <label>Translate to English</label>
+      <label for="translate-toggle">Translate to English (Whisper)</label>
       <label class="toggle">
         <input type="checkbox" id="translate-toggle" />
         <span class="toggle-slider"></span>
       </label>
     </div>
-
+    <div class="settings-note">
+      Models are downloaded on first use and cached locally. Choose the model and language next to the Transcribe button.
+    </div>
     <div class="settings-footer">
-      <button class="btn-secondary" id="settings-cancel">Cancel</button>
+      <button class="btn-ghost" id="settings-cancel">Cancel</button>
       <button class="btn-primary" id="settings-save">Save</button>
     </div>
   </div>
 </div>
-
 <div id="toast"></div>
-
 <input type="file" id="file-input" accept=".mp3,.mp4,.m4a,.wav,.ogg,.webm,.flac,.mov,.mkv,.avi,.m4v,.wmv,.3gp,.ts" style="display:none" />
 <audio id="preview-audio" style="display:none"></audio>
-
 <script src="ui-logic.js"></script>
 <script src="renderer.js"></script>
 </body>

@@ -1,20 +1,18 @@
-/* global api */
+/* global api, UiLogic */
 
 let currentFilePath = null;
 let currentFileName = null;
 
 // ── Elements ──────────────────────────────────────────────────────────────────
 const dropzone          = document.getElementById('dropzone');
+const dropzoneContent   = document.getElementById('dropzone-content');
+const inputRow          = document.getElementById('input-row');
+const titleText         = document.getElementById('title-text');
+const inlineError       = document.getElementById('inline-error');
+const transcribeLabel   = document.getElementById('transcribe-label');
 const fileInput         = /** @type {HTMLInputElement} */ (document.getElementById('file-input'));
-const statusArea        = document.getElementById('status-area');
-const statusSpinner     = document.getElementById('status-spinner');
-const statusIconOk      = document.getElementById('status-icon-ok');
-const statusIconErr     = document.getElementById('status-icon-err');
-const statusText        = document.getElementById('status-text');
-const transcriptSection = document.getElementById('transcript-section');
 const transcriptEl      = /** @type {HTMLTextAreaElement} */ (document.getElementById('transcript'));
 const charCount         = document.getElementById('char-count');
-const transcribeBtnArea = document.getElementById('transcribe-btn-area');
 const transcribeBtn     = /** @type {HTMLButtonElement} */ (document.getElementById('transcribe-btn'));
 const waveformSection   = document.getElementById('waveform-section');
 const waveformCanvas    = /** @type {HTMLCanvasElement} */ (document.getElementById('waveform-canvas'));
@@ -29,9 +27,6 @@ const previewVideo      = /** @type {HTMLVideoElement} */ (document.getElementBy
 const waveformPlayBtn   = /** @type {HTMLButtonElement} */ (document.getElementById('waveform-play-btn'));
 const waveformPlayIcon  = document.getElementById('waveform-play-icon');
 const waveformPauseIcon = document.getElementById('waveform-pause-icon');
-const progressBarWrap   = document.getElementById('progress-bar-wrap');
-const progressFill      = document.getElementById('progress-fill');
-const progressLabel     = document.getElementById('progress-label');
 const btnCopy              = /** @type {HTMLButtonElement} */ (document.getElementById('btn-copy'));
 const btnTranslate         = /** @type {HTMLButtonElement} */ (document.getElementById('btn-translate'));
 const btnTxt            = /** @type {HTMLButtonElement} */ (document.getElementById('btn-txt'));
@@ -58,6 +53,35 @@ function showToast(msg, duration = 2500) {
   toastTimer = setTimeout(() => toast.classList.remove('show'), duration);
 }
 
+// ── App state ─────────────────────────────────────────────────────────────────
+// One of UiLogic's AppState values; CSS keys off body[data-state] to decide
+// which regions are visible and enabled.
+/** @type {import('./ui-logic').AppState} */
+let appState = 'empty';
+let currentDisplayName = null;
+
+/** @param {import('./ui-logic').AppState} next */
+function setState(next) {
+  appState = next;
+  document.body.dataset.state = next;
+  titleText.textContent = (next === 'empty' || next === 'recording' || !currentDisplayName)
+    ? 'Transcriber'
+    : currentDisplayName;
+  // Waveform height differs per state (folded once transcribed).
+  if (waveformPeaks) requestAnimationFrame(drawWaveform);
+}
+
+/** @param {string} msg */
+function showError(msg) {
+  inlineError.textContent = msg;
+  inlineError.title = msg;
+}
+
+function clearError() {
+  inlineError.textContent = '';
+  inlineError.title = '';
+}
+
 // ── Recording & Capture ───────────────────────────────────────────────────────
 let mediaRecorder   = null;
 let activeStream    = null;
@@ -66,8 +90,11 @@ let recordingTimer  = null;
 let recordingSecs   = 0;
 let isRecording     = false;
 
-const DROPZONE_DEFAULT_HTML = dropzone.innerHTML;
-const inputOptions  = document.getElementById('input-options');
+const DROPZONE_DEFAULT_HTML = dropzoneContent.innerHTML;
+
+// The input row lives inside the drop zone; keep its clicks from opening the
+// file dialog.
+inputRow.addEventListener('click', (e) => e.stopPropagation());
 const urlInput      = /** @type {HTMLInputElement} */ (document.getElementById('url-input'));
 const urlLoadBtn    = document.getElementById('url-load-btn');
 
@@ -76,7 +103,7 @@ document.getElementById('record-btn').addEventListener('click', async () => {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     startRecordingWithStream(stream, 'Recording from microphone…');
   } catch (e) {
-    showStatus('error', e.name === 'NotAllowedError'
+    showError(e.name === 'NotAllowedError'
       ? 'Microphone access denied. Check System Settings → Privacy & Security → Microphone.'
       : `Could not access microphone: ${e.message}`);
   }
@@ -88,15 +115,15 @@ document.getElementById('system-audio-btn').addEventListener('click', async () =
     const audioTracks = stream.getAudioTracks();
     stream.getVideoTracks().forEach(t => t.stop());
     if (audioTracks.length === 0) {
-      showStatus('error', 'No audio captured. Enable the audio option in the screen picker.');
+      showError('No audio captured. Enable the audio option in the screen picker.');
       return;
     }
     startRecordingWithStream(new MediaStream(audioTracks), 'Capturing system audio…');
   } catch (e) {
     if (e.name === 'NotAllowedError') {
-      showStatus('error', 'Screen recording access denied. Check System Settings → Privacy & Security → Screen Recording.');
+      showError('Screen recording access denied. Check System Settings → Privacy & Security → Screen Recording.');
     } else {
-      showStatus('error', `Could not capture system audio: ${e.message}`);
+      showError(`Could not capture system audio: ${e.message}`);
     }
   }
 });
@@ -115,6 +142,7 @@ function startRecordingWithStream(stream, label) {
     activeStream = null;
     isRecording  = false;
     restoreDropzone();
+    setState('empty');
     const blob     = new Blob(recordingChunks, { type: mediaRecorder.mimeType || 'audio/webm' });
     const buffer   = await blob.arrayBuffer();
     const filePath = await api.saveRecording(new Uint8Array(buffer));
@@ -123,7 +151,7 @@ function startRecordingWithStream(stream, label) {
 
   mediaRecorder.start(250);
 
-  dropzone.innerHTML = `
+  dropzoneContent.innerHTML = `
     <div class="rec-state">
       <div class="rec-dot"></div>
       <span class="rec-timer" id="rec-timer">0:00</span>
@@ -134,10 +162,9 @@ function startRecordingWithStream(stream, label) {
       <button class="btn-secondary" id="cancel-record-btn">Cancel</button>
     </div>`;
   dropzone.classList.remove('has-file', 'hover');
-  inputOptions.classList.add('hidden');
-  transcribeBtnArea.classList.remove('visible');
-  statusArea.classList.remove('visible');
+  clearError();
   hideWaveform();
+  setState('recording');
 
   document.getElementById('stop-record-btn').addEventListener('click',   (e) => { e.stopPropagation(); stopRecording();   });
   document.getElementById('cancel-record-btn').addEventListener('click', (e) => { e.stopPropagation(); cancelRecording(); });
@@ -162,52 +189,53 @@ function cancelRecording() {
     mediaRecorder.stop();
   }
   restoreDropzone();
+  currentFilePath = null;
+  currentFileName = null;
+  currentDisplayName = null;
+  setState('empty');
 }
 
 function restoreDropzone() {
-  dropzone.innerHTML = DROPZONE_DEFAULT_HTML;
+  dropzoneContent.innerHTML = DROPZONE_DEFAULT_HTML;
   dropzone.classList.remove('has-file', 'hover');
-  dropzone.onclick = null;
-  inputOptions.classList.remove('hidden');
 }
 
 // ── URL Input ─────────────────────────────────────────────────────────────────
 urlLoadBtn.addEventListener('click', () => loadUrl(urlInput.value.trim()));
 urlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') loadUrl(urlInput.value.trim()); });
 
-// Collapses the dropzone into a compact "loaded file" row (used for both
-// local files and URLs).
+// Collapses the dropzone into the slim source bar (used for both local files
+// and URLs). Name and meta go in via textContent: URL titles are untrusted.
 function setDropzoneFile(displayName, meta) {
+  currentDisplayName = displayName;
   dropzone.classList.add('has-file');
-  dropzone.innerHTML = `
-    <svg class="mic-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
-      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-      <line x1="12" y1="19" x2="12" y2="23"/>
-      <line x1="8" y1="23" x2="16" y2="23"/>
+  dropzoneContent.innerHTML = `
+    <svg class="mic-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>
     </svg>
     <div class="file-info">
-      <div class="file-name">${displayName}</div>
-      <div class="file-meta">${meta} · Click to change</div>
-    </div>`;
-  dropzone.onclick = () => fileInput.click();
+      <div class="file-name"></div>
+      <div class="file-meta"></div>
+    </div>
+    <button class="btn-ghost" id="source-change" title="Open another file (⌘O)">Change</button>`;
+  dropzoneContent.querySelector('.file-name').textContent = displayName;
+  dropzoneContent.querySelector('.file-meta').textContent = meta;
+  if (appState !== 'empty' && appState !== 'recording') titleText.textContent = displayName;
 }
 
-// Clears transcript/status state when a new input is loaded.
+// Clears transcript/error state when a new input is loaded.
 function resetForNewMedia() {
-  transcribeBtnArea.classList.add('visible');
-  statusArea.classList.remove('visible');
-  transcriptSection.classList.remove('visible');
-  setExportEnabled(false);
+  clearError();
   btnTranslate.style.display = 'none';
   transcriptEl.value = '';
   updateCharCount();
+  setState('loaded');
 }
 
 async function loadUrl(url) {
   if (!url) return;
   let parsed;
-  try { parsed = new URL(url); } catch { showStatus('error', 'Invalid URL.'); return; }
+  try { parsed = new URL(url); } catch { showError('Invalid URL.'); return; }
 
   currentFilePath = url;
 
@@ -265,7 +293,7 @@ async function handleFile(filePath) {
   try {
     info = await api.getFileInfo(filePath);
   } catch (e) {
-    showStatus('error', `Could not read file: ${e.message}`);
+    showError(`Could not read file: ${e.message}`);
     return;
   }
 
@@ -374,11 +402,19 @@ function drawWaveform() {
   ctx.clearRect(0, 0, rect.width, rect.height);
   const midY = rect.height / 2;
   const barWidth = rect.width / waveformPeaks.length;
-  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--text-secondary').trim() || '#888';
+  const css    = getComputedStyle(document.body);
+  const muted  = css.getPropertyValue('--text-secondary').trim() || '#888';
+  const accent = css.getPropertyValue('--accent').trim() || '#007aff';
+  // Bars inside the trim selection use the accent; the rest are muted.
   waveformPeaks.forEach((p, i) => {
+    const t = ((i + 0.5) / waveformPeaks.length) * mediaDuration;
+    const inside = t >= trimStart && t <= trimEnd;
+    ctx.globalAlpha = inside ? 1 : 0.35;
+    ctx.fillStyle = inside ? accent : muted;
     const h = Math.max(1, p * midY);
     ctx.fillRect(i * barWidth, midY - h, Math.max(1, barWidth - 1), h * 2);
   });
+  ctx.globalAlpha = 1;
 }
 
 function updateHandles() {
@@ -392,6 +428,7 @@ function updateHandles() {
   trimStartLabel.textContent    = formatTime(trimStart);
   trimEndLabel.textContent      = formatTime(trimEnd);
   trimDurationLabel.textContent = `${formatTime(trimEnd - trimStart)} selected`;
+  drawWaveform();
 }
 
 function setupHandleDrag(handle, which) {
@@ -459,31 +496,30 @@ for (const el of [previewAudio, previewVideo]) {
 }
 
 // ── Transcription ─────────────────────────────────────────────────────────────
+const TRANSCRIBE_LABEL_HTML = transcribeLabel.innerHTML;
+
 transcribeBtn.addEventListener('click', () => startTranscription());
 btnTranslate.addEventListener('click', translateTranscript);
 
 async function startTranscription() {
-  if (!currentFilePath) return;
+  if (!currentFilePath || appState !== 'loaded') return;
 
-  transcribeBtn.disabled = true;
+  clearError();
   btnTranslate.style.display = 'none';
-  showStatus('loading', 'Loading model…');
-  transcriptSection.classList.remove('visible');
-  setExportEnabled(false);
+  setState('transcribing');
 
   try {
     const hasTrim = waveformPeaks && (trimStart > 0.05 || trimEnd < mediaDuration - 0.05);
     const text = await api.transcribe(currentFilePath, hasTrim ? trimStart : null, hasTrim ? trimEnd : null);
     transcriptEl.value = text;
     updateCharCount();
-    showStatus('ok', 'Transcription complete!');
-    transcriptSection.classList.add('visible');
-    setExportEnabled(true);
     btnTranslate.style.display = '';
+    setState('transcribed');
   } catch (e) {
-    showStatus('error', e.message || 'Transcription failed.');
+    setState('loaded');
+    showError(e.message || 'Transcription failed.');
   } finally {
-    transcribeBtn.disabled = false;
+    transcribeLabel.innerHTML = TRANSCRIBE_LABEL_HTML;
   }
 }
 
@@ -492,63 +528,31 @@ async function translateTranscript() {
   if (!original.trim()) return;
 
   btnTranslate.disabled = true;
-  showStatus('loading', 'Translating…');
+  btnTranslate.textContent = 'Translating…';
+  clearError();
 
   try {
     const translated = await api.translateText(original);
     transcriptEl.value = translated;
     updateCharCount();
-    showStatus('ok', 'Translation complete!');
+    showToast('Translation complete');
     btnTranslate.style.display = 'none';
   } catch (e) {
-    showStatus('error', `Translation failed: ${e.message}`);
+    showError(`Translation failed: ${e.message}`);
   } finally {
     btnTranslate.disabled = false;
+    btnTranslate.textContent = 'Translate to English';
   }
 }
 
-// ── Status ────────────────────────────────────────────────────────────────────
-function showStatus(type, message) {
-  statusArea.classList.add('visible');
-  statusText.textContent = message;
-
-  const showProgress = type === 'progress';
-  statusSpinner.style.display    = type === 'loading'  ? 'block' : 'none';
-  statusIconOk.style.display     = type === 'ok'       ? 'block' : 'none';
-  statusIconErr.style.display    = type === 'error'    ? 'block' : 'none';
-  if (showProgress) {
-    progressBarWrap.classList.add('visible');
-  } else {
-    progressBarWrap.classList.remove('visible');
-    progressFill.style.width = '0%';
-  }
-}
-
-function setProgress(pct) {
-  progressFill.style.width = `${pct}%`;
-  progressLabel.textContent = `${pct}%`;
-  if (pct > 0 && pct < 100) {
-    let label;
-    if (pct < 5) {
-      const isStream = /^https?:\/\//i.test(currentFilePath || '');
-      label = isStream ? `Fetching "${currentFileName}"…` : 'Preparing audio…';
-    } else {
-      label = `Transcribing "${currentFileName}"…`;
-    }
-    showStatus('progress', label);
-  }
+// ── Progress ──────────────────────────────────────────────────────────────────
+/** @param {'download'|'transcribe'} phase @param {number} pct */
+function setProgressText(phase, pct) {
+  const isStream = /^https?:\/\//i.test(currentFilePath || '');
+  transcribeLabel.textContent = UiLogic.progressText(phase, pct, isStream);
 }
 
 // ── Export ────────────────────────────────────────────────────────────────────
-function setExportEnabled(enabled) {
-  btnCopy.disabled = !enabled;
-  btnTxt.disabled  = !enabled;
-  btnMd.disabled   = !enabled;
-  btnDocx.disabled = !enabled;
-  btnSrt.disabled  = !enabled;
-  btnPdf.disabled  = !enabled;
-}
-
 btnCopy.addEventListener('click', () => {
   navigator.clipboard.writeText(transcriptEl.value).then(() => showToast('Copied to clipboard'));
 });
@@ -588,8 +592,6 @@ function updateCharCount() {
 // ── Settings ──────────────────────────────────────────────────────────────────
 async function openSettings() {
   const settings = await api.getSettings();
-  modelSelect.value = settings.model || 'base';
-  languageSelect.value = settings.language || 'auto';
   timestampsToggle.checked = !!settings.timestamps;
   translateToggle.checked  = !!settings.translate;
   settingsOverlay.classList.add('visible');
@@ -608,8 +610,6 @@ settingsOverlay.addEventListener('click', (e) => {
 
 settingsSave.addEventListener('click', async () => {
   await api.setSettings({
-    model:      modelSelect.value,
-    language:   languageSelect.value,
     timestamps: timestampsToggle.checked,
     translate:  translateToggle.checked,
   });
@@ -617,12 +617,18 @@ settingsSave.addEventListener('click', async () => {
   showToast('Settings saved');
 });
 
+// Model and language are per-run pickers; each change is saved as the default.
+api.getSettings().then((settings) => {
+  modelSelect.value    = settings.model    || 'base';
+  languageSelect.value = settings.language || 'auto';
+});
+modelSelect.addEventListener('change', () => api.setSettings({ model: modelSelect.value }));
+languageSelect.addEventListener('change', () => api.setSettings({ language: languageSelect.value }));
+
 // ── IPC from main ─────────────────────────────────────────────────────────────
 api.onFileSelected((filePath) => handleFile(filePath));
 api.onOpenSettings(() => openSettings());
-api.onTranscriptionProgress((pct) => setProgress(pct));
-api.onModelDownloadProgress((pct) => {
-  showStatus('progress', 'Downloading model…');
-  progressFill.style.width = `${pct}%`;
-  progressLabel.textContent = `${pct}%`;
-});
+api.onTranscriptionProgress((pct) => setProgressText('transcribe', pct));
+api.onModelDownloadProgress((pct) => setProgressText('download', pct));
+
+setState('empty');
