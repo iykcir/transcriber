@@ -221,10 +221,32 @@ function setDropzoneFile(displayName, meta) {
       <div class="file-name"></div>
       <div class="file-meta"></div>
     </div>
-    <button class="btn-ghost" id="source-change" title="Open another file (⌘O)">Change</button>`;
+    <button class="btn-ghost" id="source-change" title="Open another file (⌘O)">Change</button>
+    <button class="icon-btn" id="source-clear" title="Close file" aria-label="Close file">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>`;
+  dropzoneContent.querySelector('#source-clear').addEventListener('click', (e) => {
+    e.stopPropagation();
+    clearMedia();
+  });
   dropzoneContent.querySelector('.file-name').textContent = displayName;
   dropzoneContent.querySelector('.file-meta').textContent = meta;
   if (appState !== 'empty' && appState !== 'recording') titleText.textContent = displayName;
+}
+
+// Back to the empty drop zone (and its record / system audio / link row).
+function clearMedia() {
+  if (!guardLoadMedia()) return;
+  currentFilePath = null;
+  currentFileName = null;
+  currentDisplayName = null;
+  restoreDropzone();
+  hideWaveform();
+  clearError();
+  btnTranslate.style.display = 'none';
+  transcriptEl.value = '';
+  updateCharCount();
+  setState('empty');
 }
 
 // Clears transcript/error state when a new input is loaded.
@@ -263,6 +285,7 @@ async function loadUrl(url) {
       const res = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`);
       if (res.ok) {
         const data = await res.json();
+        if (currentFilePath !== url) return; // other media loaded meanwhile
         currentFileName = data.title;
         setDropzoneFile(data.title, `YouTube · ${data.author_name}`);
       }
@@ -280,7 +303,11 @@ dropzone.addEventListener('dragover', (e) => {
 
 dropzone.addEventListener('dragleave', () => dropzone.classList.remove('hover'));
 
-dropzone.addEventListener('drop', (e) => {
+// Drops are handled for the whole window, not just the drop zone: the source
+// bar is a small target, and during a run the zone ignores pointer events.
+// Without this, Chromium's default would open the dropped file in the window.
+document.addEventListener('dragover', (e) => e.preventDefault());
+document.addEventListener('drop', (e) => {
   e.preventDefault();
   dropzone.classList.remove('hover');
   const file = e.dataTransfer.files[0];
@@ -355,7 +382,8 @@ async function loadWaveform(filePath) {
   hideWaveform();
   try {
     const { peaks, duration, previewPath } = await api.getWaveformPeaks(filePath);
-    if (!duration) return;
+    // Peaks can arrive late (e.g. YouTube); drop them if other media was loaded.
+    if (!duration || filePath !== currentFilePath) return;
     waveformPeaks = peaks;
     mediaDuration = duration;
     trimStart = 0;

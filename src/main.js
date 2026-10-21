@@ -45,6 +45,10 @@ function createWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
+
+  // The app is a single page; never let a stray file drop (or anything else)
+  // navigate the window away from it.
+  mainWindow.webContents.on('will-navigate', (e) => e.preventDefault());
 }
 
 function buildMenu() {
