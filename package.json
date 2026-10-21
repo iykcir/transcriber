@@ -9,7 +9,8 @@
     "build:whisper": "cd node_modules/nodejs-whisper/cpp/whisper.cpp && rm -rf build && /opt/homebrew/bin/cmake -B build -DBUILD_SHARED_LIBS=OFF && /opt/homebrew/bin/cmake --build build --config Release",
     "build": "npm run build:whisper && electron-builder",
     "pack": "npm run build:whisper && electron-builder --dir",
-    "typecheck": "tsc -p jsconfig.json"
+    "typecheck": "tsc -p jsconfig.json",
+    "test": "node --test test/"
   },
   "dependencies": {
     "@distube/ytdl-core": "^4.16.12",
