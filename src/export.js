@@ -1,7 +1,14 @@
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
+const { summaryToText, summaryToMarkdown, formatTopicTime } = require('./summarize');
 
-async function exportPDF(transcript, title, outputPath) {
+/** @typedef {import('./summarize').Summary} Summary */
+
+/**
+ * @param {string} transcript @param {string} title @param {string} outputPath
+ * @param {Summary | null} [summary]
+ */
+async function exportPDF(transcript, title, outputPath, summary = null) {
   return /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
     const doc = new PDFDocument({
       size: 'LETTER',
@@ -41,6 +48,25 @@ async function exportPDF(transcript, title, outputPath) {
       .stroke();
     doc.moveDown(0.8);
 
+    if (summary) {
+      doc.font('Times-Bold').fontSize(14).fillColor('#1a1a1a').text('Summary');
+      doc.moveDown(0.3);
+      doc.font('Times-Roman').fontSize(12).text(summary.overview, { lineGap: 4 });
+      doc.moveDown(0.4);
+      for (const t of summary.topics) {
+        const time = formatTopicTime(t.startSec);
+        doc.text(`•  ${time ? `${time}  ` : ''}${t.title}`, { lineGap: 2 });
+      }
+      doc.moveDown(0.8);
+      doc
+        .moveTo(72, doc.y)
+        .lineTo(doc.page.width - 72, doc.y)
+        .strokeColor('#cccccc')
+        .lineWidth(0.5)
+        .stroke();
+      doc.moveDown(0.8);
+    }
+
     // Body text
     doc
       .font('Times-Roman')
@@ -76,7 +102,11 @@ async function exportPDF(transcript, title, outputPath) {
   }));
 }
 
-async function exportDOCX(transcript, title, outputPath) {
+/**
+ * @param {string} transcript @param {string} title @param {string} outputPath
+ * @param {Summary | null} [summary]
+ */
+async function exportDOCX(transcript, title, outputPath, summary = null) {
   const { Document, Packer, Paragraph, TextRun, HeadingLevel } = require('docx');
 
   const dateStr = new Date().toLocaleDateString('en-US', {
@@ -90,6 +120,24 @@ async function exportDOCX(transcript, title, outputPath) {
     })
   );
 
+  const run = (text, extra = {}) => new TextRun({ text, size: 24, font: 'Times New Roman', ...extra });
+  const summaryParagraphs = summary ? [
+    new Paragraph({
+      heading: HeadingLevel.HEADING_2,
+      children: [run('Summary', { bold: true, size: 28 })],
+      spacing: { after: 120 },
+    }),
+    new Paragraph({ children: [run(summary.overview)], spacing: { after: 120 } }),
+    ...summary.topics.map((t) => {
+      const time = formatTopicTime(t.startSec);
+      return new Paragraph({
+        children: [run('•  '), ...(time ? [run(`${time}  `, { bold: true })] : []), run(t.title)],
+        spacing: { after: 60 },
+      });
+    }),
+    new Paragraph({ children: [], spacing: { after: 240 } }),
+  ] : [];
+
   const doc = new Document({
     sections: [{
       children: [
@@ -102,6 +150,7 @@ async function exportDOCX(transcript, title, outputPath) {
           children: [new TextRun({ text: `Transcribed on ${dateStr}`, color: '666666', size: 20, italics: true, font: 'Times New Roman' })],
           spacing: { after: 240 },
         }),
+        ...summaryParagraphs,
         ...bodyParagraphs,
       ],
     }],
@@ -135,11 +184,25 @@ function exportSRT(transcript) {
     .join('\n\n') + '\n';
 }
 
-function exportMarkdown(transcript, title) {
+/**
+ * @param {string} transcript @param {string} title
+ * @param {Summary | null} [summary]
+ */
+function exportMarkdown(transcript, title, summary = null) {
   const dateStr = new Date().toLocaleDateString('en-US', {
     year: 'numeric', month: 'long', day: 'numeric',
   });
-  return `# ${title}\n\n*Transcribed on ${dateStr}*\n\n---\n\n${transcript.trim()}\n`;
+  const summaryBlock = summary ? `${summaryToMarkdown(summary)}\n` : '';
+  return `# ${title}\n\n*Transcribed on ${dateStr}*\n\n${summaryBlock}---\n\n${transcript.trim()}\n`;
 }
 
-module.exports = { exportPDF, exportDOCX, exportSRT, exportMarkdown };
+/**
+ * Plain-text export: the summary (when there is one) above the transcript.
+ * @param {string} transcript
+ * @param {Summary | null} [summary]
+ */
+function buildTxt(transcript, summary = null) {
+  return summary ? `${summaryToText(summary)}\n${transcript}` : transcript;
+}
+
+module.exports = { exportPDF, exportDOCX, exportSRT, exportMarkdown, buildTxt };

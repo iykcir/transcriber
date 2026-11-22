@@ -262,30 +262,30 @@ ipcMain.handle('get-waveform-peaks', async (_, filePath) => {
 });
 
 // Each export format shares the same flow: prompt for a destination, then
-// write. `write` gets (transcript, filename, outPath); ./export is required
+// write. `write` gets (transcript, filename, outPath, summary); ./export is required
 // lazily so pdfkit/docx don't load at app startup.
 const EXPORT_FORMATS = {
   'save-txt':  { title: 'Text', name: 'Text File', ext: 'txt',
-    write: (t, _f, out) => fs.writeFileSync(out, t, 'utf8') },
+    write: (t, _f, out, sum) => fs.writeFileSync(out, require('./export').buildTxt(t, sum), 'utf8') },
   'save-md':   { title: 'Markdown', name: 'Markdown', ext: 'md',
-    write: (t, f, out) => fs.writeFileSync(out, require('./export').exportMarkdown(t, f), 'utf8') },
+    write: (t, f, out, sum) => fs.writeFileSync(out, require('./export').exportMarkdown(t, f, sum), 'utf8') },
   'save-srt':  { title: 'Subtitles', name: 'SubRip Subtitle', ext: 'srt',
     write: (t, _f, out) => fs.writeFileSync(out, require('./export').exportSRT(t), 'utf8') },
   'save-docx': { title: 'Word Document', name: 'Word Document', ext: 'docx',
-    write: (t, f, out) => require('./export').exportDOCX(t, f, out) },
+    write: (t, f, out, sum) => require('./export').exportDOCX(t, f, out, sum) },
   'save-pdf':  { title: 'PDF', name: 'PDF', ext: 'pdf',
-    write: (t, f, out) => require('./export').exportPDF(t, f, out) },
+    write: (t, f, out, sum) => require('./export').exportPDF(t, f, out, sum) },
 };
 
 for (const [channel, fmt] of Object.entries(EXPORT_FORMATS)) {
-  ipcMain.handle(channel, async (_, { transcript, filename }) => {
+  ipcMain.handle(channel, async (_, { transcript, filename, summary }) => {
     const result = await dialog.showSaveDialog(mainWindow, {
       title: `Save Transcript as ${fmt.title}`,
       defaultPath: `${filename}.${fmt.ext}`,
       filters: [{ name: fmt.name, extensions: [fmt.ext] }],
     });
     if (result.canceled) return null;
-    await fmt.write(transcript, filename, result.filePath);
+    await fmt.write(transcript, filename, result.filePath, summary ?? null);
     return result.filePath;
   });
 }
