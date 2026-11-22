@@ -1,6 +1,6 @@
 # Transcriber
 
-A native-feeling macOS desktop app for offline audio and video transcription, powered by [whisper.cpp](https://github.com/ggerganov/whisper.cpp). No API key required — transcription runs entirely on-device.
+A native-feeling macOS desktop app for offline audio and video transcription, powered by [whisper.cpp](https://github.com/ggerganov/whisper.cpp). No API key required — transcription runs entirely on-device. (Optional summaries use Claude with your own API key.)
 
 ## Features
 
@@ -36,7 +36,7 @@ Downloaded automatically on first use and cached in `~/Library/Application Suppo
 | Turbo (large-v3-turbo, quantized) | 574 MB | Most accurate — near large-v3 quality, faster than Medium |
 
 ### Transcription options
-**Model**, **Language** and optional **Spelling hints** are chosen right next to the Transcribe button; whatever you pick is remembered for next time. **Timestamps**, **Translate to English**, filler-word removal, recent transcripts and the launch-time update check live in Settings (⌘,).
+**Model**, **Language** and optional **Spelling hints** are chosen right next to the Transcribe button; whatever you pick is remembered for next time. **Timestamps**, **Translate to English**, filler-word removal, recent transcripts, your Anthropic API key and auto-summarize (for summaries), and the launch-time update check live in Settings (⌘,).
 
 - **Spelling hints** — names, jargon or acronyms whisper should spell exactly, separated by commas (e.g. *Okonkwo, Kubernetes, MBS*); a short explanation appears under the field while you type
 
@@ -47,6 +47,15 @@ Downloaded automatically on first use and cached in `~/Library/Application Suppo
 
 ### Post-transcription
 - **Translate to English** — translates any completed transcript to English via Google Translate without re-transcribing
+
+### Summaries
+A quick read on what a recording covers, so you can decide whether it's worth listening to. A **Summary** card above the transcript gives a 2–3 sentence overview and the 4–6 main topics in order. When the transcript has timestamps, each topic shows where it starts.
+
+- **Summarize** in the transcript footer creates one. **⟳** on the card makes a new one, for example after editing or translating the transcript. **▾** folds the card away, and the app remembers that choice.
+- **Summarize automatically after transcribing** (Settings) creates a summary as soon as each transcription finishes.
+- Summaries are saved with recent transcripts and included at the top of TXT, Markdown, DOCX and PDF exports.
+
+Summaries are optional and use Claude, so they need your own [Anthropic API key](https://console.anthropic.com), added in Settings. The key is encrypted with your macOS Keychain. Only the transcript text is sent to Anthropic, and only when you click Summarize or turn on auto-summarize. Transcription itself stays on your Mac. A one-hour episode costs about $0.07 to summarize. Saved summaries stay readable after you remove your key.
 
 ### Recent transcripts
 Every finished transcript is saved on your Mac and listed under the drop zone when no file is open — click one to reopen it. Edits and translations are saved automatically. Hover a row and click **×** to remove it, or turn off **Keep recent transcripts** in Settings to stop saving and clear the list. The 25 most recent are kept.
@@ -65,6 +74,8 @@ From the **Export** menu in the title bar (⌘S): TXT · Markdown · DOCX (Word)
 - **Update check** — on launch the app checks GitHub for a newer release and shows an **Update available** button in the title bar that opens the download page (turn it off in Settings)
 
 ## Requirements
+
+Summaries need an Anthropic API key and an internet connection; everything else works offline.
 
 To use the packaged app (DMG), just macOS 11+ on Apple Silicon — ffmpeg ships bundled, and yt-dlp is downloaded automatically on first YouTube use and kept up to date, so neither needs a separate install. (whisper-cli is compiled on the build machine, so Intel Macs would need their own from-source build.)
 
