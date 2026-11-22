@@ -7,7 +7,8 @@ const crypto = require('crypto');
 
 /**
  * @typedef {{id: string, name: string, fileName: string, source: string,
- *            createdAt: number, text: string}} HistoryEntry
+ *            createdAt: number, text: string,
+ *            summary?: import('./summarize').Summary | null}} HistoryEntry
  */
 
 /**
@@ -37,12 +38,14 @@ function createHistoryStore(filePath, { limit = 25, now = Date.now } = {}) {
   return {
     /** Summaries for the list view (text omitted, length included). */
     list() {
-      return read().map(({ text, ...rest }) => ({ ...rest, chars: text.length }));
+      // eslint-disable-next-line no-unused-vars
+      return read().map(({ text, summary, ...rest }) => ({ ...rest, chars: text.length }));
     },
 
     /** @param {string} id */
     get(id) {
-      return read().find((e) => e.id === id) || null;
+      const entry = read().find((e) => e.id === id);
+      return entry ? { ...entry, summary: entry.summary ?? null } : null;
     },
 
     /** @param {{name: string, fileName: string, source: string, text: string}} entry */
@@ -59,6 +62,19 @@ function createHistoryStore(filePath, { limit = 25, now = Date.now } = {}) {
       const entry = entries.find((e) => e.id === id);
       if (!entry || typeof text !== 'string') return false;
       entry.text = text;
+      write(entries);
+      return true;
+    },
+
+    /**
+     * @param {string} id
+     * @param {import('./summarize').Summary | null} summary
+     */
+    updateSummary(id, summary) {
+      const entries = read();
+      const entry = entries.find((e) => e.id === id);
+      if (!entry) return false;
+      entry.summary = summary ?? null;
       write(entries);
       return true;
     },

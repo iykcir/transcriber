@@ -59,3 +59,32 @@ test('a missing or corrupt file reads as empty and recovers on write', () => {
   store.add(entry(1));
   assert.equal(createHistoryStore(file).list().length, 1);
 });
+
+const summary = { overview: 'O.', topics: [{ title: 'A', startSec: 5 }], createdAt: 7 };
+
+test('updateSummary round-trips through get and is left out of list', () => {
+  const store = createHistoryStore(tmpFile());
+  const id = store.add(entry(1));
+  assert.equal(store.updateSummary(id, summary), true);
+  assert.deepEqual(store.get(id).summary, summary);
+  assert.equal(store.list()[0].summary, undefined);
+  assert.equal(store.get(id).text, 'text 1');
+});
+
+test('entries without a summary read back as null', () => {
+  const file = tmpFile();
+  fs.writeFileSync(file, JSON.stringify([{ id: 'old', name: 'n', fileName: 'f', source: 's', createdAt: 1, text: 't' }]));
+  assert.equal(createHistoryStore(file).get('old').summary, null);
+});
+
+test('updateSummary on a missing id returns false', () => {
+  assert.equal(createHistoryStore(tmpFile()).updateSummary('missing', summary), false);
+});
+
+test('updateSummary with null clears it', () => {
+  const store = createHistoryStore(tmpFile());
+  const id = store.add(entry(1));
+  store.updateSummary(id, summary);
+  store.updateSummary(id, null);
+  assert.equal(store.get(id).summary, null);
+});

@@ -32,6 +32,7 @@ const api = {
   getHistory: (id) => ipcRenderer.invoke('history-get', id),
   addHistory: (entry) => ipcRenderer.invoke('history-add', entry),
   updateHistory: (id, text) => ipcRenderer.invoke('history-update', id, text),
+  updateHistorySummary: (id, summary) => ipcRenderer.invoke('history-update-summary', id, summary),
   removeHistory: (id) => ipcRenderer.invoke('history-remove', id),
   onUpdateAvailable: (cb) => ipcRenderer.on('update-available', (_, info) => cb(info)),
   openReleasePage: () => ipcRenderer.invoke('open-release-page'),

@@ -246,6 +246,7 @@ ipcMain.handle('history-list', () => history.list());
 ipcMain.handle('history-get', (_, id) => history.get(id));
 ipcMain.handle('history-add', (_, entry) => (readConfig().keepHistory === false ? null : history.add(entry)));
 ipcMain.handle('history-update', (_, id, text) => history.update(id, { text }));
+ipcMain.handle('history-update-summary', (_, id, summary) => history.updateSummary(id, summary));
 ipcMain.handle('history-remove', (_, id) => history.remove(id));
 
 // Opens only the release page main itself found; the renderer can't pass a URL.
