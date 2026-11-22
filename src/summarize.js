@@ -77,15 +77,8 @@ function normalizeSummary(raw, now = Date.now) {
   return { overview, topics, createdAt: now() };
 }
 
-/** @param {number | null} sec */
-function formatTopicTime(sec) {
-  if (sec == null) return '';
-  const total = Math.floor(sec);
-  const h = Math.floor(total / 3600);
-  const m = Math.floor((total % 3600) / 60);
-  const s = String(total % 60).padStart(2, '0');
-  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
-}
+// Shared with the renderer, which loads ui-logic.js as a classic script.
+const { formatTopicTime } = require('./ui-logic');
 
 /** @param {SummaryTopic} t @param {(time: string) => string} wrap */
 function topicLine(t, wrap) {

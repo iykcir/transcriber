@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { shortcutAction, isCancelledError, progressText, canLoadMedia, errorMessage, relativeTime } = require('../src/ui-logic');
+const { shortcutAction, isCancelledError, progressText, canLoadMedia, errorMessage, relativeTime, summaryView, formatTopicTime } = require('../src/ui-logic');
 
 const ctx = (state, o = {}) => ({ state, exportMenuOpen: false, settingsOpen: false, ...o });
 const key = (k, o = {}) => ({ key: k, metaKey: false, shiftKey: false, ...o });
@@ -71,4 +71,47 @@ test('relativeTime', () => {
   assert.equal(relativeTime(new Date(2026, 9, 20, 9, 0).getTime(), now), 'Yesterday');
   assert.equal(relativeTime(new Date(2026, 9, 3, 9, 0).getTime(), now), 'Oct 3');
   assert.equal(relativeTime(new Date(2025, 11, 30, 9, 0).getTime(), now), 'Dec 30, 2025');
+});
+
+const sum = { overview: 'O.', topics: [], createdAt: 0 };
+
+test('summaryView: no key, no summary hides everything', () => {
+  assert.deepEqual(summaryView({ hasKey: false, summary: null, status: 'idle' }),
+    { card: 'hidden', showSummarizeButton: false, canRegenerate: false });
+});
+
+test('summaryView: no key shows a saved summary read-only', () => {
+  assert.deepEqual(summaryView({ hasKey: false, summary: sum, status: 'idle' }),
+    { card: 'summary', showSummarizeButton: false, canRegenerate: false });
+});
+
+test('summaryView: key and no summary offers the Summarize button', () => {
+  assert.deepEqual(summaryView({ hasKey: true, summary: null, status: 'idle' }),
+    { card: 'hidden', showSummarizeButton: true, canRegenerate: false });
+});
+
+test('summaryView: running shows the running card and no button', () => {
+  const v = summaryView({ hasKey: true, summary: null, status: 'running' });
+  assert.equal(v.card, 'running');
+  assert.equal(v.showSummarizeButton, false);
+});
+
+test('summaryView: error offers Retry', () => {
+  const v = summaryView({ hasKey: true, summary: null, status: 'error' });
+  assert.equal(v.card, 'error');
+  assert.equal(v.canRegenerate, true);
+});
+
+test('summaryView: key and summary can regenerate', () => {
+  assert.deepEqual(summaryView({ hasKey: true, summary: sum, status: 'idle' }),
+    { card: 'summary', showSummarizeButton: false, canRegenerate: true });
+});
+
+test('summaryView: without a key a stale running or error status falls back', () => {
+  assert.equal(summaryView({ hasKey: false, summary: null, status: 'error' }).card, 'hidden');
+  assert.equal(summaryView({ hasKey: false, summary: sum, status: 'running' }).card, 'summary');
+});
+
+test('formatTopicTime is shared with the renderer', () => {
+  assert.equal(formatTopicTime(245), '4:05');
 });

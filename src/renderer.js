@@ -54,6 +54,21 @@ const fillersToggle     = /** @type {HTMLInputElement} */ (document.getElementBy
 const hintInput         = /** @type {HTMLInputElement} */ (document.getElementById('hint-input'));
 const recentsEl         = document.getElementById('recents');
 const recentsList       = document.getElementById('recents-list');
+const summaryCard       = document.getElementById('summary-card');
+const summaryToggle     = document.getElementById('summary-toggle');
+const summaryRegen      = /** @type {HTMLButtonElement} */ (document.getElementById('summary-regen'));
+const summaryOverview   = document.getElementById('summary-overview');
+const summaryTopics     = document.getElementById('summary-topics');
+const summaryStatusEl   = document.getElementById('summary-status');
+const summaryStatusText = document.getElementById('summary-status-text');
+const summaryAction     = /** @type {HTMLButtonElement} */ (document.getElementById('summary-action'));
+const btnSummarize      = /** @type {HTMLButtonElement} */ (document.getElementById('btn-summarize'));
+const apiKeyInput       = /** @type {HTMLInputElement} */ (document.getElementById('api-key-input'));
+const apiKeySaved       = document.getElementById('api-key-saved');
+const apiKeySaveBtn     = /** @type {HTMLButtonElement} */ (document.getElementById('api-key-save'));
+const apiKeyRemoveBtn   = /** @type {HTMLButtonElement} */ (document.getElementById('api-key-remove'));
+const apiKeyError       = document.getElementById('api-key-error');
+const autoSummarizeToggle = /** @type {HTMLInputElement} */ (document.getElementById('auto-summarize-toggle'));
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
 let toastTimer;
@@ -257,6 +272,7 @@ function clearMedia() {
   hideWaveform();
   clearError();
   btnTranslate.style.display = 'none';
+  clearSummary();
   transcriptEl.value = '';
   updateCharCount();
   setState('empty');
@@ -268,6 +284,7 @@ function resetForNewMedia() {
   mediaGeneration++;
   clearError();
   btnTranslate.style.display = 'none';
+  clearSummary();
   transcriptEl.value = '';
   updateCharCount();
   setState('loaded');
@@ -572,6 +589,7 @@ async function startTranscription() {
 
   clearError();
   btnTranslate.style.display = 'none';
+  clearSummary();
   setState('transcribing');
   setButtonProgress('transcribe', 0);
 
@@ -590,6 +608,7 @@ async function startTranscription() {
       source: currentFilePath,
       text,
     });
+    if (autoSummarize && hasApiKey) runSummary();
   } catch (e) {
     setState('loaded');
     // A user cancel isn't an error: just return to the loaded file.
@@ -685,27 +704,27 @@ btnCopy.addEventListener('click', () => {
 });
 
 btnTxt.addEventListener('click', async () => {
-  const saved = await api.saveTXT({ transcript: transcriptEl.value, filename: currentFileName });
+  const saved = await api.saveTXT({ transcript: transcriptEl.value, filename: currentFileName, summary: currentSummary });
   if (saved) showToast('Saved as TXT');
 });
 
 btnMd.addEventListener('click', async () => {
-  const saved = await api.saveMD({ transcript: transcriptEl.value, filename: currentFileName });
+  const saved = await api.saveMD({ transcript: transcriptEl.value, filename: currentFileName, summary: currentSummary });
   if (saved) showToast('Saved as Markdown');
 });
 
 btnDocx.addEventListener('click', async () => {
-  const saved = await api.saveDOCX({ transcript: transcriptEl.value, filename: currentFileName });
+  const saved = await api.saveDOCX({ transcript: transcriptEl.value, filename: currentFileName, summary: currentSummary });
   if (saved) showToast('Saved as DOCX');
 });
 
 btnSrt.addEventListener('click', async () => {
-  const saved = await api.saveSRT({ transcript: transcriptEl.value, filename: currentFileName });
+  const saved = await api.saveSRT({ transcript: transcriptEl.value, filename: currentFileName, summary: currentSummary });
   if (saved) showToast('Saved as SRT');
 });
 
 btnPdf.addEventListener('click', async () => {
-  const saved = await api.savePDF({ transcript: transcriptEl.value, filename: currentFileName });
+  const saved = await api.savePDF({ transcript: transcriptEl.value, filename: currentFileName, summary: currentSummary });
   if (saved) showToast('Saved as PDF');
 });
 
@@ -778,6 +797,9 @@ async function openRecent(id) {
   updateCharCount();
   btnTranslate.style.display = '';
   currentHistoryId = id;
+  clearSummary();
+  currentSummary = entry.summary ?? null;
+  renderSummary();
   setState('transcribed');
 }
 
@@ -785,6 +807,143 @@ function updateCharCount() {
   const len = transcriptEl.value.length;
   charCount.textContent = len > 0 ? `${len.toLocaleString()} chars` : '';
 }
+
+// ── Summary ───────────────────────────────────────────────────────────────────
+// The summary for the transcript on screen. It lives here (so it works with
+// history off) and is also written to the history entry when there is one.
+/** @type {{overview: string, topics: {title: string, startSec: number | null}[], createdAt: number} | null} */
+let currentSummary = null;
+/** @type {'idle'|'running'|'error'} */
+let summaryStatus = 'idle';
+let summaryErrorText = '';
+let hasApiKey = false;
+let autoSummarize = false;
+// Bumped per run and on clear, so a late or superseded result is dropped.
+let summaryRun = 0;
+
+const SUMMARY_COLLAPSED_KEY = 'summaryCollapsed';
+function readCollapsed() {
+  try { return localStorage.getItem(SUMMARY_COLLAPSED_KEY) === '1'; } catch { return false; }
+}
+function setCollapsed(collapsed) {
+  summaryCard.classList.toggle('collapsed', collapsed);
+  summaryToggle.setAttribute('aria-expanded', String(!collapsed));
+  try { localStorage.setItem(SUMMARY_COLLAPSED_KEY, collapsed ? '1' : '0'); } catch { /* per-viewer nicety only */ }
+}
+setCollapsed(readCollapsed());
+summaryToggle.addEventListener('click', () => setCollapsed(!summaryCard.classList.contains('collapsed')));
+
+function renderSummary() {
+  const view = UiLogic.summaryView({ hasKey: hasApiKey, summary: currentSummary, status: summaryStatus });
+  summaryCard.hidden = view.card === 'hidden';
+  summaryCard.dataset.view = view.card;
+  btnSummarize.style.display = view.showSummarizeButton ? '' : 'none';
+  summaryRegen.hidden = !(view.card === 'summary' && view.canRegenerate);
+
+  const showSummary = view.card === 'summary';
+  summaryOverview.hidden = !showSummary;
+  summaryTopics.hidden = !showSummary;
+  summaryOverview.textContent = showSummary ? currentSummary.overview : '';
+  summaryTopics.replaceChildren(...(showSummary ? currentSummary.topics.map((t) => {
+    const li = document.createElement('li');
+    const time = UiLogic.formatTopicTime(t.startSec);
+    if (time) {
+      const span = document.createElement('span');
+      span.className = 'topic-time';
+      span.textContent = time;
+      li.append(span);
+    }
+    li.append(t.title);
+    return li;
+  }) : []));
+
+  summaryStatusEl.hidden = view.card !== 'running' && view.card !== 'error';
+  summaryStatusText.textContent = view.card === 'running' ? 'Summarizing…' : summaryErrorText;
+  summaryAction.textContent = view.card === 'running' ? 'Cancel' : 'Retry';
+}
+
+async function runSummary() {
+  if (!hasApiKey) return;
+  const run = ++summaryRun;
+  const generation = mediaGeneration;
+  const historyId = currentHistoryId;
+  summaryStatus = 'running';
+  summaryErrorText = '';
+  renderSummary();
+  try {
+    const summary = await api.summarize(transcriptEl.value);
+    if (run !== summaryRun || generation !== mediaGeneration) return;
+    currentSummary = summary;
+    summaryStatus = 'idle';
+    if (historyId && historyId === currentHistoryId) api.updateHistorySummary(historyId, summary);
+  } catch (e) {
+    if (run !== summaryRun || generation !== mediaGeneration) return;
+    if (UiLogic.isCancelledError(e)) {
+      summaryStatus = 'idle';
+    } else {
+      summaryStatus = 'error';
+      summaryErrorText = UiLogic.errorMessage(e) || 'Summarizing failed.';
+    }
+  }
+  renderSummary();
+}
+
+// Forget the summary on screen (new media, closed file) and stop any request.
+function clearSummary() {
+  if (summaryStatus === 'running') api.cancelSummary();
+  summaryRun++;
+  currentSummary = null;
+  summaryStatus = 'idle';
+  summaryErrorText = '';
+  renderSummary();
+}
+
+btnSummarize.addEventListener('click', runSummary);
+summaryRegen.addEventListener('click', runSummary);
+summaryAction.addEventListener('click', () => {
+  if (summaryStatus === 'running') {
+    summaryRun++;
+    api.cancelSummary();
+    summaryStatus = 'idle';
+    renderSummary();
+  } else {
+    runSummary();
+  }
+});
+
+/** @param {{hasApiKey: boolean, autoSummarize: boolean}} settings */
+function applyKeySettings(settings) {
+  hasApiKey = settings.hasApiKey;
+  apiKeyInput.hidden = hasApiKey;
+  apiKeySaveBtn.hidden = hasApiKey;
+  apiKeySaved.hidden = !hasApiKey;
+  apiKeyRemoveBtn.hidden = !hasApiKey;
+  autoSummarizeToggle.disabled = !hasApiKey;
+  autoSummarizeToggle.checked = hasApiKey && settings.autoSummarize;
+}
+
+apiKeySaveBtn.addEventListener('click', async () => {
+  const result = await api.setApiKey(apiKeyInput.value);
+  if (!result.ok) {
+    apiKeyError.textContent = result.error;
+    return;
+  }
+  apiKeyInput.value = '';
+  apiKeyError.textContent = '';
+  applyKeySettings(await api.getSettings());
+  renderSummary();
+  showToast('API key saved');
+});
+
+apiKeyRemoveBtn.addEventListener('click', async () => {
+  await api.removeApiKey();
+  // Main aborted any request in flight; drop its result here too.
+  if (summaryStatus === 'running') summaryRun++;
+  summaryStatus = 'idle';
+  applyKeySettings(await api.getSettings());
+  renderSummary();
+  showToast('API key removed');
+});
 
 // ── Settings ──────────────────────────────────────────────────────────────────
 async function openSettings() {
@@ -794,6 +953,9 @@ async function openSettings() {
   updateCheckToggle.checked = settings.checkUpdates;
   keepHistoryToggle.checked = settings.keepHistory;
   fillersToggle.checked     = settings.removeFillers;
+  applyKeySettings(settings);
+  apiKeyInput.value = '';
+  apiKeyError.textContent = '';
   settingsOverlay.classList.add('visible');
 }
 
@@ -815,7 +977,9 @@ settingsSave.addEventListener('click', async () => {
     checkUpdates: updateCheckToggle.checked,
     keepHistory:  keepHistoryToggle.checked,
     removeFillers: fillersToggle.checked,
+    ...(hasApiKey ? { autoSummarize: autoSummarizeToggle.checked } : {}),
   });
+  if (hasApiKey) autoSummarize = autoSummarizeToggle.checked;
   if (!keepHistoryToggle.checked) leaveHistoryEntry();
   if (appState === 'empty') refreshRecents();
   closeSettings();
@@ -828,6 +992,9 @@ api.getSettings().then((settings) => {
   languageSelect.value = settings.language || 'auto';
   hintInput.value      = settings.prompt   || '';
   savedHint            = hintInput.value;
+  hasApiKey            = settings.hasApiKey;
+  autoSummarize        = settings.autoSummarize;
+  renderSummary();
 });
 
 // Vocabulary hint: names and terms whisper should spell correctly. Remembered

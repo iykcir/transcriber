@@ -200,7 +200,31 @@ ipcMain.handle('set-api-key', (_, key) => {
     return { ok: false, error: err.message };
   }
 });
-ipcMain.handle('remove-api-key', () => apiKey.remove());
+ipcMain.handle('remove-api-key', () => {
+  summaryController?.abort();
+  apiKey.remove();
+});
+
+// One summary request at a time; starting another (or cancelling) aborts the
+// one in flight. Errors reach the renderer already written for people.
+/** @type {AbortController | null} */
+let summaryController = null;
+ipcMain.handle('summarize', async (_, text) => {
+  const { summarizeTranscript, summaryErrorMessage } = require('./summarize');
+  const key = apiKey.get();
+  if (!key) throw new Error('Add your Anthropic API key in Settings.');
+  summaryController?.abort();
+  const controller = new AbortController();
+  summaryController = controller;
+  try {
+    return await summarizeTranscript(text, key, controller.signal);
+  } catch (err) {
+    throw new Error(summaryErrorMessage(err), { cause: err });
+  } finally {
+    if (summaryController === controller) summaryController = null;
+  }
+});
+ipcMain.handle('cancel-summary', () => summaryController?.abort());
 
 // Shows progress on the Dock icon and, if the user has switched away, a
 // notification when the run ends.

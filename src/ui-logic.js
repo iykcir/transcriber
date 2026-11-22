@@ -78,6 +78,33 @@ function canLoadMedia(state) {
   return state !== 'recording' && state !== 'transcribing';
 }
 
-const UiLogic = { shortcutAction, isCancelledError, errorMessage, progressText, canLoadMedia, relativeTime };
+/**
+ * What the Summary card and Summarize button show. Saved summaries stay
+ * visible without a key (read-only); making new ones needs a key.
+ * @param {{hasKey: boolean, summary: object | null, status: 'idle'|'running'|'error'}} s
+ * @returns {{card: 'hidden'|'running'|'error'|'summary', showSummarizeButton: boolean, canRegenerate: boolean}}
+ */
+function summaryView({ hasKey, summary, status }) {
+  if (hasKey && status === 'running') return { card: 'running', showSummarizeButton: false, canRegenerate: false };
+  if (hasKey && status === 'error') return { card: 'error', showSummarizeButton: false, canRegenerate: true };
+  if (summary) return { card: 'summary', showSummarizeButton: false, canRegenerate: hasKey };
+  return { card: 'hidden', showSummarizeButton: hasKey, canRegenerate: false };
+}
+
+/**
+ * A topic's start time as M:SS, or H:MM:SS from an hour up; '' when unknown.
+ * @param {number | null} sec
+ */
+function formatTopicTime(sec) {
+  if (sec == null) return '';
+  const total = Math.floor(sec);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = String(total % 60).padStart(2, '0');
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
+}
+
+const UiLogic = { shortcutAction, isCancelledError, errorMessage, progressText, canLoadMedia, relativeTime,
+  summaryView, formatTopicTime };
 if (typeof module !== 'undefined') module.exports = UiLogic;
 else globalThis.UiLogic = UiLogic;
