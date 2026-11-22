@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { shortcutAction, isCancelledError, progressText, canLoadMedia, errorMessage, relativeTime, summaryView, formatTopicTime } = require('../src/ui-logic');
+const { shortcutAction, isCancelledError, progressText, canLoadMedia, errorMessage, relativeTime, summaryView, formatTopicTime, shouldAutoSummarize, hasSpokenText } = require('../src/ui-logic');
 
 const ctx = (state, o = {}) => ({ state, exportMenuOpen: false, settingsOpen: false, ...o });
 const key = (k, o = {}) => ({ key: k, metaKey: false, shiftKey: false, ...o });
@@ -77,17 +77,17 @@ const sum = { overview: 'O.', topics: [], createdAt: 0 };
 
 test('summaryView: no key, no summary hides everything', () => {
   assert.deepEqual(summaryView({ hasKey: false, summary: null, status: 'idle' }),
-    { card: 'hidden', showSummarizeButton: false, canRegenerate: false });
+    { card: 'hidden', showSummarizeButton: false, canRegenerate: false, showError: false });
 });
 
 test('summaryView: no key shows a saved summary read-only', () => {
   assert.deepEqual(summaryView({ hasKey: false, summary: sum, status: 'idle' }),
-    { card: 'summary', showSummarizeButton: false, canRegenerate: false });
+    { card: 'summary', showSummarizeButton: false, canRegenerate: false, showError: false });
 });
 
 test('summaryView: key and no summary offers the Summarize button', () => {
   assert.deepEqual(summaryView({ hasKey: true, summary: null, status: 'idle' }),
-    { card: 'hidden', showSummarizeButton: true, canRegenerate: false });
+    { card: 'hidden', showSummarizeButton: true, canRegenerate: false, showError: false });
 });
 
 test('summaryView: running shows the running card and no button', () => {
@@ -104,7 +104,7 @@ test('summaryView: error offers Retry', () => {
 
 test('summaryView: key and summary can regenerate', () => {
   assert.deepEqual(summaryView({ hasKey: true, summary: sum, status: 'idle' }),
-    { card: 'summary', showSummarizeButton: false, canRegenerate: true });
+    { card: 'summary', showSummarizeButton: false, canRegenerate: true, showError: false });
 });
 
 test('summaryView: without a key a stale running or error status falls back', () => {
@@ -114,4 +114,50 @@ test('summaryView: without a key a stale running or error status falls back', ()
 
 test('formatTopicTime is shared with the renderer', () => {
   assert.equal(formatTopicTime(245), '4:05');
+});
+
+test('summaryView: a failed regenerate keeps the old summary with an error line', () => {
+  assert.deepEqual(summaryView({ hasKey: true, summary: sum, status: 'error' }),
+    { card: 'summary', showSummarizeButton: false, canRegenerate: true, showError: true });
+});
+
+test('summaryView: a first-time failure shows the error card', () => {
+  const v = summaryView({ hasKey: true, summary: null, status: 'error' });
+  assert.equal(v.card, 'error');
+  assert.equal(v.showError, true);
+});
+
+const auto = (o = {}) => shouldAutoSummarize({ autoSummarize: true, hasKey: true, text: 'Hello.', sameMedia: true, ...o });
+
+test('shouldAutoSummarize: runs when on, keyed, with text, on the same media', () => {
+  assert.equal(auto(), true);
+});
+
+test('shouldAutoSummarize: skips a silent or blank transcript', () => {
+  assert.equal(auto({ text: '' }), false);
+  assert.equal(auto({ text: '  \n ' }), false);
+});
+
+test('shouldAutoSummarize: skips when the media changed meanwhile', () => {
+  assert.equal(auto({ sameMedia: false }), false);
+});
+
+test('shouldAutoSummarize: skips when off or without a key', () => {
+  assert.equal(auto({ autoSummarize: false }), false);
+  assert.equal(auto({ hasKey: false }), false);
+});
+
+test('hasSpokenText: whisper silence markers are not speech', () => {
+  assert.equal(hasSpokenText('[00:00:00.000 --> 00:00:10.000]   [BLANK_AUDIO]'), false);
+  assert.equal(hasSpokenText('[BLANK_AUDIO]\n[MUSIC]\n(silence)\n[ Silence ]'), false);
+  assert.equal(hasSpokenText('  \n '), false);
+});
+
+test('hasSpokenText: real words count, with or without timestamps', () => {
+  assert.equal(hasSpokenText('[00:00:00.000 --> 00:00:02.000]   Hello there.'), true);
+  assert.equal(hasSpokenText('Hello [MUSIC] there.'), true);
+});
+
+test('shouldAutoSummarize: skips a transcript that is only silence markers', () => {
+  assert.equal(auto({ text: '[00:00:00.000 --> 00:00:10.000]   [BLANK_AUDIO]' }), false);
 });

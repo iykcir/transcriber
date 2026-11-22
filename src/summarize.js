@@ -78,7 +78,7 @@ function normalizeSummary(raw, now = Date.now) {
 }
 
 // Shared with the renderer, which loads ui-logic.js as a classic script.
-const { formatTopicTime } = require('./ui-logic');
+const { formatTopicTime, hasSpokenText } = require('./ui-logic');
 
 /** @param {SummaryTopic} t @param {(time: string) => string} wrap */
 function topicLine(t, wrap) {
@@ -109,7 +109,7 @@ class SummaryError extends Error {}
  * @returns {Promise<Summary>}
  */
 async function summarizeTranscript(transcript, apiKey, signal, client) {
-  if (!transcript || !transcript.trim()) throw new SummaryError('Nothing to summarize.');
+  if (!transcript || !hasSpokenText(transcript)) throw new SummaryError('Nothing to summarize.');
   if (!client) {
     const Anthropic = require('@anthropic-ai/sdk').default;
     client = new Anthropic({ apiKey });
@@ -150,6 +150,10 @@ function summaryErrorMessage(err) {
   }
   if (err instanceof Anthropic.RateLimitError) {
     return 'Hit the API rate limit. Wait a minute and try again.';
+  }
+  // A subclass of APIConnectionError, so it has to be checked first.
+  if (err instanceof Anthropic.APIConnectionTimeoutError) {
+    return 'Claude took too long to respond. Try again.';
   }
   if (err instanceof Anthropic.APIConnectionError) {
     return 'Couldn\'t connect to Claude. Check your internet connection.';

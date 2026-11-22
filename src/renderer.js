@@ -591,6 +591,7 @@ async function startTranscription() {
   btnTranslate.style.display = 'none';
   clearSummary();
   setState('transcribing');
+  const generation = mediaGeneration;
   setButtonProgress('transcribe', 0);
 
   try {
@@ -608,7 +609,9 @@ async function startTranscription() {
       source: currentFilePath,
       text,
     });
-    if (autoSummarize && hasApiKey) runSummary();
+    if (UiLogic.shouldAutoSummarize({ autoSummarize, hasKey: hasApiKey, text, sameMedia: generation === mediaGeneration })) {
+      runSummary();
+    }
   } catch (e) {
     setState('loaded');
     // A user cancel isn't an error: just return to the loaded file.
@@ -857,9 +860,11 @@ function renderSummary() {
     return li;
   }) : []));
 
-  summaryStatusEl.hidden = view.card !== 'running' && view.card !== 'error';
-  summaryStatusText.textContent = view.card === 'running' ? 'Summarizing…' : summaryErrorText;
-  summaryAction.textContent = view.card === 'running' ? 'Cancel' : 'Retry';
+  const running = view.card === 'running';
+  summaryCard.dataset.error = view.showError ? '1' : '';
+  summaryStatusEl.hidden = !running && !view.showError;
+  summaryStatusText.textContent = running ? 'Summarizing…' : summaryErrorText;
+  summaryAction.textContent = running ? 'Cancel' : 'Retry';
 }
 
 async function runSummary() {

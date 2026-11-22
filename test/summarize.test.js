@@ -109,3 +109,16 @@ test('a rejected request does not invite a pointless retry', () => {
   assert.match(summaryErrorMessage(badReq), /too long/i);
   assert.match(summaryErrorMessage(tooLarge), /too long/i);
 });
+
+test('a timeout gets its own message, not the connection one', () => {
+  const msg = summaryErrorMessage(new Anthropic.APIConnectionTimeoutError());
+  assert.match(msg, /too long to respond/i);
+  assert.doesNotMatch(msg, /internet/i);
+});
+
+test('a silence-only transcript is not sent', async () => {
+  let called = false;
+  const client = fakeClient(async () => { called = true; });
+  await assert.rejects(summarizeTranscript('[00:00:00.000 --> 00:00:10.000]   [BLANK_AUDIO]', 'k', undefined, client), /Nothing to summarize/);
+  assert.equal(called, false);
+});

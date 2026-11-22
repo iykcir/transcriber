@@ -80,15 +80,42 @@ function canLoadMedia(state) {
 
 /**
  * What the Summary card and Summarize button show. Saved summaries stay
- * visible without a key (read-only); making new ones needs a key.
+ * visible without a key (read-only); making new ones needs a key. A failed
+ * regenerate keeps the previous summary on screen with an error line, so
+ * what you see always matches what gets exported.
  * @param {{hasKey: boolean, summary: object | null, status: 'idle'|'running'|'error'}} s
- * @returns {{card: 'hidden'|'running'|'error'|'summary', showSummarizeButton: boolean, canRegenerate: boolean}}
+ * @returns {{card: 'hidden'|'running'|'error'|'summary', showSummarizeButton: boolean,
+ *            canRegenerate: boolean, showError: boolean}}
  */
 function summaryView({ hasKey, summary, status }) {
-  if (hasKey && status === 'running') return { card: 'running', showSummarizeButton: false, canRegenerate: false };
-  if (hasKey && status === 'error') return { card: 'error', showSummarizeButton: false, canRegenerate: true };
-  if (summary) return { card: 'summary', showSummarizeButton: false, canRegenerate: hasKey };
-  return { card: 'hidden', showSummarizeButton: hasKey, canRegenerate: false };
+  const failed = hasKey && status === 'error';
+  if (hasKey && status === 'running') {
+    return { card: 'running', showSummarizeButton: false, canRegenerate: false, showError: false };
+  }
+  if (summary) return { card: 'summary', showSummarizeButton: false, canRegenerate: hasKey, showError: failed };
+  if (failed) return { card: 'error', showSummarizeButton: false, canRegenerate: true, showError: true };
+  return { card: 'hidden', showSummarizeButton: hasKey, canRegenerate: false, showError: false };
+}
+
+/**
+ * Whether to start a summary on its own once a transcription is saved:
+ * only when it's turned on and a key is saved, the transcript isn't blank
+ * (silence), and the user hasn't loaded other media in the meantime.
+ * @param {{autoSummarize: boolean, hasKey: boolean, text: string, sameMedia: boolean}} s
+ */
+function shouldAutoSummarize({ autoSummarize, hasKey, text, sameMedia }) {
+  return autoSummarize && hasKey && sameMedia && hasSpokenText(text);
+}
+
+/**
+ * Whether a transcript has any spoken words. Whisper writes silence as
+ * markers rather than nothing ("[00:00:00.000 --> 00:00:10.000] [BLANK_AUDIO]"),
+ * so timestamps and bracketed or parenthesised tags don't count.
+ * @param {string} text
+ */
+function hasSpokenText(text) {
+  const words = text.replace(/\[[^\]]*\]|\([^)]*\)/g, ' ');
+  return /[\p{L}\p{N}]/u.test(words);
 }
 
 /**
@@ -105,6 +132,6 @@ function formatTopicTime(sec) {
 }
 
 const UiLogic = { shortcutAction, isCancelledError, errorMessage, progressText, canLoadMedia, relativeTime,
-  summaryView, formatTopicTime };
+  summaryView, shouldAutoSummarize, hasSpokenText, formatTopicTime };
 if (typeof module !== 'undefined') module.exports = UiLogic;
 else globalThis.UiLogic = UiLogic;
