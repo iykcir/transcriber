@@ -57,3 +57,10 @@ test('get returns null when the stored value cannot be decrypted', () => {
     decryptString: () => { throw new Error('bad'); } } });
   assert.equal(store.get(), null);
 });
+
+test('a key that can no longer be decrypted counts as no key', () => {
+  const cfg = fakeConfig({ anthropicKeyEnc: 'Zm9v' });
+  const store = createKeyStore({ ...cfg, safeStorage: { ...fakeSafeStorage(),
+    decryptString: () => { throw new Error('bad'); } } });
+  assert.equal(store.has(), false);
+});

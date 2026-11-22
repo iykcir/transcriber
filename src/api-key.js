@@ -42,9 +42,10 @@ function createKeyStore({ readConfig, writeConfig, safeStorage }) {
       }
     },
 
+    // A key that can't be decrypted (Keychain reset, new Mac) counts as no
+    // key, so Settings offers to add one instead of claiming it's saved.
     has() {
-      const enc = readConfig().anthropicKeyEnc;
-      return typeof enc === 'string' && enc.length > 0;
+      return this.get() !== null;
     },
   };
 }

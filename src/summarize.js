@@ -121,7 +121,11 @@ async function summarizeTranscript(transcript, apiKey, signal, client) {
   if (response.stop_reason === 'max_tokens') {
     throw new SummaryError('The summary was cut off. Try again.');
   }
-  const text = response.content.find((b) => b.type === 'text')?.text;
+  // With a refusal fallback, content can hold the declining model's partial
+  // output, then a `fallback` block, then the fallback model's answer. Only
+  // what comes after the last fallback block is the real reply.
+  const lastFallback = response.content.map((b) => b.type).lastIndexOf('fallback');
+  const text = response.content.slice(lastFallback + 1).filter((b) => b.type === 'text').pop()?.text;
   try {
     return normalizeSummary(JSON.parse(text));
   } catch {
@@ -149,6 +153,11 @@ function summaryErrorMessage(err) {
   }
   if (err instanceof Anthropic.APIConnectionError) {
     return 'Couldn\'t connect to Claude. Check your internet connection.';
+  }
+  // A rejected request fails the same way every time, so don't invite a retry.
+  // The likeliest cause for a transcript is length.
+  if (err instanceof Anthropic.BadRequestError || (err instanceof Anthropic.APIError && err.status === 413)) {
+    return 'Claude couldn\'t summarize this transcript. It may be too long.';
   }
   if (err instanceof Anthropic.APIError && (err.status ?? 0) >= 500) {
     return 'Claude is unavailable right now. Try again in a moment.';

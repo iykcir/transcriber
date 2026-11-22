@@ -91,3 +91,21 @@ test('summaryErrorMessage maps SDK errors', () => {
   assert.equal(summaryErrorMessage(Object.assign(new Error('x'), { name: 'AbortError' })), 'Cancelled');
   assert.equal(summaryErrorMessage(new Error('Nothing to summarize.')), 'Nothing to summarize.');
 });
+
+test('after a fallback, the summary is read from the fallback model\'s text', async () => {
+  const client = fakeClient(async () => ({ stop_reason: 'end_turn', content: [
+    { type: 'text', text: '{"overv' },
+    { type: 'fallback', from: { model: 'claude-opus-5-5' }, to: { model: 'claude-opus-4-8' } },
+    { type: 'text', text: '{"overview":"From fallback.","topics":[]}' },
+  ] }));
+  const s = await summarizeTranscript('hello', 'k', undefined, client);
+  assert.equal(s.overview, 'From fallback.');
+});
+
+test('a rejected request does not invite a pointless retry', () => {
+  const badReq = new Anthropic.BadRequestError(400, undefined, 'prompt is too long', new Headers());
+  const tooLarge = Anthropic.APIError.generate(413, undefined, 'too large', new Headers());
+  assert.doesNotMatch(summaryErrorMessage(badReq), /try again/i);
+  assert.match(summaryErrorMessage(badReq), /too long/i);
+  assert.match(summaryErrorMessage(tooLarge), /too long/i);
+});
