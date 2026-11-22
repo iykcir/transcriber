@@ -49,3 +49,45 @@ test('summaryToText / summaryToMarkdown', () => {
   assert.equal(summaryToText(s), 'Summary\n\nO.\n\n• 1:05 A\n• B\n');
   assert.equal(summaryToMarkdown(s), '## Summary\n\nO.\n\n- **1:05** A\n- B\n');
 });
+
+const { summarizeTranscript, summaryErrorMessage } = require('../src/summarize');
+const Anthropic = require('@anthropic-ai/sdk').default;
+
+const fakeClient = (create) => /** @type {any} */ ({ beta: { messages: { create } } });
+
+test('empty transcript rejects without calling the API', async () => {
+  let called = false;
+  const client = fakeClient(async () => { called = true; });
+  await assert.rejects(summarizeTranscript('  \n ', 'k', undefined, client), /Nothing to summarize/);
+  assert.equal(called, false);
+});
+
+test('summarizeTranscript sends the request and parses the JSON text block', async () => {
+  let sent;
+  const client = fakeClient(async (params) => {
+    sent = params;
+    return { stop_reason: 'end_turn',
+      content: [{ type: 'text', text: '{"overview":"O.","topics":[{"title":"A","startSec":3}]}' }] };
+  });
+  const s = await summarizeTranscript('hello', 'k', undefined, client);
+  assert.equal(s.overview, 'O.');
+  assert.deepEqual(s.topics, [{ title: 'A', startSec: 3 }]);
+  assert.equal(sent.model, 'claude-opus-5-5');
+});
+
+test('refusal becomes the declined message', async () => {
+  const client = fakeClient(async () => ({ stop_reason: 'refusal', content: [] }));
+  await assert.rejects(summarizeTranscript('hello', 'k', undefined, client), /declined/i);
+});
+
+test('summaryErrorMessage maps SDK errors', () => {
+  const authErr = new Anthropic.AuthenticationError(401, undefined, 'bad key', new Headers());
+  const rateErr = new Anthropic.RateLimitError(429, undefined, 'slow down', new Headers());
+  const connErr = new Anthropic.APIConnectionError({ message: 'offline' });
+  assert.equal(summaryErrorMessage(authErr), 'Your API key was rejected. Check it in Settings.');
+  assert.match(summaryErrorMessage(rateErr), /rate limit/i);
+  assert.match(summaryErrorMessage(connErr), /connect/i);
+  assert.equal(summaryErrorMessage(new Anthropic.APIUserAbortError()), 'Cancelled');
+  assert.equal(summaryErrorMessage(Object.assign(new Error('x'), { name: 'AbortError' })), 'Cancelled');
+  assert.equal(summaryErrorMessage(new Error('Nothing to summarize.')), 'Nothing to summarize.');
+});

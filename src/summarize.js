@@ -105,7 +105,67 @@ function summaryToMarkdown(s) {
   return `## Summary\n\n${s.overview}\n\n${lines.join('\n')}\n`;
 }
 
+/** Thrown for outcomes whose message is already written for people. */
+class SummaryError extends Error {}
+
+/**
+ * @param {string} transcript
+ * @param {string} apiKey
+ * @param {AbortSignal} [signal]
+ * @param {any} [client] injectable for tests; defaults to a real SDK client
+ * @returns {Promise<Summary>}
+ */
+async function summarizeTranscript(transcript, apiKey, signal, client) {
+  if (!transcript || !transcript.trim()) throw new SummaryError('Nothing to summarize.');
+  if (!client) {
+    const Anthropic = require('@anthropic-ai/sdk').default;
+    client = new Anthropic({ apiKey });
+  }
+  const response = await client.beta.messages.create(buildSummaryRequest(transcript), { signal });
+  if (response.stop_reason === 'refusal') {
+    throw new SummaryError('Claude declined to summarize this transcript.');
+  }
+  if (response.stop_reason === 'max_tokens') {
+    throw new SummaryError('The summary was cut off. Try again.');
+  }
+  const text = response.content.find((b) => b.type === 'text')?.text;
+  try {
+    return normalizeSummary(JSON.parse(text));
+  } catch {
+    throw new SummaryError('Claude returned a summary the app couldn\'t read. Try again.');
+  }
+}
+
+/**
+ * Turns any failure from summarizeTranscript into one line for the card.
+ * Never includes the API key: SDK messages don't contain it, and we don't
+ * pass raw request details through.
+ * @param {unknown} err
+ */
+function summaryErrorMessage(err) {
+  const Anthropic = require('@anthropic-ai/sdk').default;
+  if (err instanceof Anthropic.APIUserAbortError || /** @type {any} */ (err)?.name === 'AbortError') {
+    return 'Cancelled';
+  }
+  if (err instanceof SummaryError) return err.message;
+  if (err instanceof Anthropic.AuthenticationError || err instanceof Anthropic.PermissionDeniedError) {
+    return 'Your API key was rejected. Check it in Settings.';
+  }
+  if (err instanceof Anthropic.RateLimitError) {
+    return 'Hit the API rate limit. Wait a minute and try again.';
+  }
+  if (err instanceof Anthropic.APIConnectionError) {
+    return 'Couldn\'t connect to Claude. Check your internet connection.';
+  }
+  if (err instanceof Anthropic.APIError && (err.status ?? 0) >= 500) {
+    return 'Claude is unavailable right now. Try again in a moment.';
+  }
+  if (err instanceof Error && err.message === 'Nothing to summarize.') return err.message;
+  return 'Summarizing failed. Try again.';
+}
+
 module.exports = {
   SUMMARY_SCHEMA, buildSummaryRequest, normalizeSummary,
   formatTopicTime, summaryToText, summaryToMarkdown,
+  summarizeTranscript, summaryErrorMessage,
 };
