@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu, shell, net, Notification } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell, net, Notification, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -31,6 +31,9 @@ function writeConfig(data) {
   const current = readConfig();
   fs.writeFileSync(CONFIG_PATH, JSON.stringify({ ...current, ...data }, null, 2));
 }
+
+const { createKeyStore } = require('./api-key');
+const apiKey = createKeyStore({ readConfig, writeConfig, safeStorage });
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -173,14 +176,31 @@ ipcMain.handle('get-settings', () => {
     prompt:     config.prompt     || '',
     keepHistory: config.keepHistory !== false,
     removeFillers: config.removeFillers !== false,
+    autoSummarize: config.autoSummarize === true,
+    hasApiKey: apiKey.has(),
   };
 });
 
 ipcMain.handle('set-settings', (_, settings) => {
-  writeConfig(settings);
+  // The key only changes through set-api-key / remove-api-key.
+  const rest = { ...settings };
+  delete rest.anthropicKeyEnc;
+  writeConfig(rest);
   // Turning history off also forgets what was kept.
   if (settings.keepHistory === false) history.clear();
 });
+
+// The API key goes in but never comes back out: the renderer only learns
+// whether one is saved (hasApiKey in get-settings).
+ipcMain.handle('set-api-key', (_, key) => {
+  try {
+    apiKey.save(key);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+});
+ipcMain.handle('remove-api-key', () => apiKey.remove());
 
 // Shows progress on the Dock icon and, if the user has switched away, a
 // notification when the run ends.

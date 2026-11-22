@@ -10,6 +10,8 @@ function toFileUrl(filePath) {
 const api = {
   getSettings: () => ipcRenderer.invoke('get-settings'),
   setSettings: (settings) => ipcRenderer.invoke('set-settings', settings),
+  setApiKey: (key) => ipcRenderer.invoke('set-api-key', key),
+  removeApiKey: () => ipcRenderer.invoke('remove-api-key'),
   transcribe: (filePath, startSec, endSec, displayName) => ipcRenderer.invoke('transcribe', filePath, startSec, endSec, displayName),
   cancelTranscription: () => ipcRenderer.invoke('cancel-transcription'),
   getWaveformPeaks: (filePath) => ipcRenderer.invoke('get-waveform-peaks', filePath),
