@@ -7,6 +7,8 @@
  * @typedef {{title: string, date: number | null, durationSec: number | null}} EpisodeTarget
  */
 
+const { podcastLinkKind } = require('./ui-logic');
+
 const DAY_MS = 86400000;
 
 /** @param {string} s */
@@ -164,7 +166,168 @@ function matchEpisode(target, episodes) {
   return close.length === 1 ? close[0] : null;
 }
 
+// ── Resolving a link ──────────────────────────────────────────────────────────
+
+const MESSAGES = {
+  SHOW_LINK: 'This is a link to a whole show. Paste a link to a single episode.',
+  SPOTIFY_UNREADABLE: 'Couldn\'t read this Spotify link. Check that it\'s a podcast episode.',
+  SHOW_NOT_FOUND: 'Couldn\'t find this show in a public podcast directory. Spotify-only shows can\'t be transcribed.',
+  EPISODE_NOT_FOUND: 'Couldn\'t find this episode in the show\'s public feed.',
+  SUBSCRIBERS_ONLY: 'This episode is only available to subscribers, so it can\'t be transcribed.',
+  NETWORK: 'Couldn\'t reach the podcast service. Check your internet connection.',
+  OTHER: 'Couldn\'t load this podcast link.',
+};
+
+const TIMEOUT_MS = 15000;
+const MAX_FEED_BYTES = 20 * 1024 * 1024;
+const MAX_CANDIDATE_SHOWS = 3;
+
+/** Thrown for every failure; the message is written for people. */
+class PodcastLinkError extends Error {
+  /** @param {keyof typeof MESSAGES} code @param {{cause?: unknown}} [options] */
+  constructor(code, options) {
+    super(MESSAGES[code], options);
+    this.name = 'PodcastLinkError';
+    this.code = code;
+  }
+}
+
+/** @param {unknown} err */
+function podcastErrorMessage(err) {
+  return err instanceof PodcastLinkError ? err.message : MESSAGES.OTHER;
+}
+
+/**
+ * @typedef {(url: string, init?: any) => Promise<any>} FetchLike
+ * @typedef {{fetch: FetchLike, signal?: AbortSignal}} Http
+ */
+
+/** GET `url`; any network failure, timeout or non-2xx becomes NETWORK. */
+async function get(http, url, init = {}) {
+  const timeout = AbortSignal.timeout(TIMEOUT_MS);
+  const signal = http.signal ? AbortSignal.any([http.signal, timeout]) : timeout;
+  let res;
+  try {
+    res = await http.fetch(url, { redirect: 'follow', ...init, signal });
+  } catch (err) {
+    throw new PodcastLinkError('NETWORK', { cause: err });
+  }
+  if (!res.ok) throw new PodcastLinkError('NETWORK', { cause: new Error(`HTTP ${res.status} for ${url}`) });
+  return res;
+}
+
+async function getText(http, url) {
+  const res = await get(http, url);
+  try { return await res.text(); } catch (err) { throw new PodcastLinkError('NETWORK', { cause: err }); }
+}
+
+async function getJson(http, url) {
+  const text = await getText(http, url);
+  try { return JSON.parse(text); } catch (err) { throw new PodcastLinkError('NETWORK', { cause: err }); }
+}
+
+/** Episodes from a feed, or [] when the feed can't be read or is too big. */
+async function feedEpisodes(http, feedUrl) {
+  if (!feedUrl) return [];
+  let res;
+  try { res = await get(http, feedUrl); } catch { return []; }
+  if (Number(res.headers?.get?.('content-length') ?? 0) > MAX_FEED_BYTES) return [];
+  let xml;
+  try { xml = await res.text(); } catch { return []; }
+  if (xml.length > MAX_FEED_BYTES) return [];
+  return parseRssItems(xml);
+}
+
+/** @param {Http} http @param {string} showId @param {string} country */
+async function lookupShow(http, showId, country) {
+  const url = `https://itunes.apple.com/lookup?id=${encodeURIComponent(showId)}&entity=podcastEpisode&limit=200&country=${encodeURIComponent(country)}`;
+  return parseAppleLookup(await getJson(http, url));
+}
+
+/** @param {Episode} episode @param {string} show @param {'Spotify' | 'Apple Podcasts'} service */
+function found(episode, show, service) {
+  if (!episode.mediaUrl) throw new PodcastLinkError('SUBSCRIBERS_ONLY');
+  return { mediaUrl: episode.mediaUrl, title: episode.title, show, service };
+}
+
+async function resolveApple(http, url, { showId, episodeId, country }) {
+  const lookup = await lookupShow(http, showId, country);
+  const hit = lookup.episodes.find((e) => e.trackId === episodeId);
+  if (hit) return found(hit, lookup.show, 'Apple Podcasts');
+  const title = parseAppleEpisodeTitle(await getText(http, url));
+  if (!title) throw new PodcastLinkError('EPISODE_NOT_FOUND');
+  const match = matchEpisode({ title, date: null, durationSec: null }, await feedEpisodes(http, lookup.feedUrl));
+  if (!match) throw new PodcastLinkError('EPISODE_NOT_FOUND');
+  return found(match, lookup.show, 'Apple Podcasts');
+}
+
+async function resolveSpotify(http, episodeId, regions) {
+  const target = parseSpotifyEpisodePage(await getText(http, `https://open.spotify.com/episode/${episodeId}`));
+  if (!target) throw new PodcastLinkError('SPOTIFY_UNREADABLE');
+  const wantShow = normalizeTitle(target.show);
+  let sawShow = false;
+  for (const region of regions) {
+    const search = await getJson(http, `https://itunes.apple.com/search?term=${encodeURIComponent(target.show)}`
+      + `&media=podcast&entity=podcast&limit=10&country=${encodeURIComponent(region)}`);
+    const candidates = (Array.isArray(search?.results) ? search.results : [])
+      .filter((r) => r?.collectionId != null && normalizeTitle(r.collectionName) === wantShow)
+      .slice(0, MAX_CANDIDATE_SHOWS);
+    if (!candidates.length) continue;
+    sawShow = true;
+    const lookups = [];
+    for (const c of candidates) {
+      const lookup = await lookupShow(http, String(c.collectionId), region);
+      lookups.push({ lookup, feedUrl: lookup.feedUrl ?? c.feedUrl ?? null, show: lookup.show || c.collectionName });
+      const match = matchEpisode(target, lookup.episodes);
+      if (match) return found(match, lookups.at(-1).show, 'Spotify');
+    }
+    for (const { feedUrl, show } of lookups) {
+      const match = matchEpisode(target, await feedEpisodes(http, feedUrl));
+      if (match) return found(match, show, 'Spotify');
+    }
+  }
+  throw new PodcastLinkError(sawShow ? 'EPISODE_NOT_FOUND' : 'SHOW_NOT_FOUND');
+}
+
+/** Follows a spotify.link short link to the open.spotify.com URL it stands for. */
+async function expandSpotifyShortLink(http, url) {
+  const res = await get(http, url);
+  const finalKind = podcastLinkKind(res.url ?? '');
+  if (finalKind && finalKind.service !== 'spotify-short') return finalKind;
+  let body = '';
+  try { body = await res.text(); } catch { /* fall through */ }
+  const m = /https:\/\/open\.spotify\.com\/(?:intl-[a-z-]+\/)?(?:episode|show)\/[A-Za-z0-9]{22}/i.exec(body);
+  const kind = m ? podcastLinkKind(m[0]) : null;
+  if (!kind) throw new PodcastLinkError('SPOTIFY_UNREADABLE');
+  return kind;
+}
+
+/**
+ * @param {string} url  a Spotify or Apple Podcasts link
+ * @param {{fetch: FetchLike, regions?: string[], signal?: AbortSignal}} deps
+ * @returns {Promise<{mediaUrl: string, title: string, show: string, service: 'Spotify' | 'Apple Podcasts'}>}
+ */
+async function resolvePodcastLink(url, { fetch, regions = ['us'], signal }) {
+  const http = { fetch, signal };
+  try {
+    let kind = podcastLinkKind(url);
+    if (kind?.service === 'spotify-short') kind = await expandSpotifyShortLink(http, url);
+    if (!kind) throw new PodcastLinkError('OTHER');
+    if (kind.service === 'spotify-show' || kind.service === 'apple-show') throw new PodcastLinkError('SHOW_LINK');
+    if (kind.service === 'apple') return await resolveApple(http, url, kind);
+    if (kind.service === 'spotify') {
+      const list = [...new Set(regions.map((r) => String(r).toLowerCase()).filter(Boolean))];
+      return await resolveSpotify(http, kind.episodeId, list.length ? list : ['us']);
+    }
+    throw new PodcastLinkError('OTHER');
+  } catch (err) {
+    if (err instanceof PodcastLinkError) throw err;
+    throw new PodcastLinkError('OTHER', { cause: err });
+  }
+}
+
 module.exports = {
   parseSpotifyEpisodePage, parseAppleEpisodeTitle, parseAppleLookup, parseRssItems,
   normalizeTitle, matchEpisode,
+  PodcastLinkError, resolvePodcastLink, podcastErrorMessage,
 };

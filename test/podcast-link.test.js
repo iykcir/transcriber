@@ -105,3 +105,166 @@ test('matchEpisode refuses when two episodes fit the date and length', () => {
 test('matchEpisode returns null when nothing is close', () => {
   assert.equal(matchEpisode({ title: 'Nope', date: T0, durationSec: 1430 }, [ep('A', T0 - 10 * DAY, 3000)]), null);
 });
+
+// ── resolvePodcastLink with a fake fetch ─────────────────────────────────────
+const { resolvePodcastLink, podcastErrorMessage, PodcastLinkError } = require('../src/podcast-link');
+
+const SPOTIFY = 'https://open.spotify.com/episode/4ZDqaBObIEQr68g4oXT15u';
+const APPLE = 'https://podcasts.apple.com/us/podcast/the-daily/id1200361736?i=1000803574143';
+const LOOKUP = JSON.parse(fixture('apple-lookup.json'));
+const MEASLES_MP3 = LOOKUP.results[1].episodeUrl;
+
+function reply(body, { status = 200, url, headers = {} } = {}) {
+  const text = typeof body === 'string' ? body : JSON.stringify(body);
+  return {
+    ok: status >= 200 && status < 300, status, url,
+    headers: { get: (k) => headers[k.toLowerCase()] ?? null },
+    text: async () => text,
+    json: async () => JSON.parse(text),
+  };
+}
+
+// routes: [predicate(url) => boolean, response | (url) => response][]; unmatched → 404.
+function fakeFetch(routes) {
+  const calls = [];
+  const fn = async (url) => {
+    calls.push(url);
+    for (const [match, res] of routes) {
+      if (match(url)) {
+        if (res instanceof Error) throw res;
+        return typeof res === 'function' ? res(url) : { url, ...res };
+      }
+    }
+    return reply('not found', { status: 404, url });
+  };
+  fn.calls = calls;
+  return fn;
+}
+
+const has = (...parts) => (url) => parts.every((p) => url.includes(p));
+const lookupWithout = (trackId) => ({ ...LOOKUP, results: LOOKUP.results.filter((r) => String(r.trackId) !== trackId || r.kind === 'podcast') });
+const FEED_WITH_MEASLES = fixture('feed.xml').replace('</channel>',
+  '<item><title>Measles Is Officially Back. What Now?</title><pubDate>Sun, 23 Nov 2026 10:45:00 GMT</pubDate>'
+  + '<itunes:duration>1430</itunes:duration><enclosure url="https://example.com/audio/measles.mp3"/></item></channel>');
+
+const rejectsWith = (p, code) => assert.rejects(p, (err) => {
+  assert.ok(err instanceof PodcastLinkError, `expected PodcastLinkError, got ${err}`);
+  assert.equal(err.code, code);
+  return true;
+});
+
+test('resolve: Apple link found in the show lookup', async () => {
+  const fetch = fakeFetch([[has('itunes.apple.com/lookup', 'id=1200361736', 'country=us'), reply(LOOKUP)]]);
+  assert.deepEqual(await resolvePodcastLink(APPLE, { fetch }), {
+    mediaUrl: MEASLES_MP3, title: 'Measles Is Officially Back. What Now?', show: 'The Daily', service: 'Apple Podcasts',
+  });
+  assert.equal(fetch.calls.length, 1);
+});
+
+test('resolve: older Apple episode goes through the page title and the feed', async () => {
+  const fetch = fakeFetch([
+    [has('itunes.apple.com/lookup'), reply(lookupWithout('1000803574143'))],
+    [has('podcasts.apple.com/'), reply(fixture('apple-episode.html'))],
+    [has('feeds.simplecast.com/Sl5CSM3S'), reply(FEED_WITH_MEASLES)],
+  ]);
+  const r = await resolvePodcastLink(APPLE, { fetch });
+  assert.equal(r.mediaUrl, 'https://example.com/audio/measles.mp3');
+  assert.equal(r.title, 'Measles Is Officially Back. What Now?');
+  assert.equal(r.show, 'The Daily');
+});
+
+test('resolve: Apple episode without public audio is subscribers-only', async () => {
+  const lookup = structuredClone(LOOKUP);
+  delete lookup.results[1].episodeUrl;
+  const fetch = fakeFetch([[has('itunes.apple.com/lookup'), reply(lookup)]]);
+  await rejectsWith(resolvePodcastLink(APPLE, { fetch }), 'SUBSCRIBERS_ONLY');
+});
+
+test('resolve: Spotify link via Apple search and lookup', async () => {
+  const fetch = fakeFetch([
+    [has('open.spotify.com/episode/4ZDqaBObIEQr68g4oXT15u'), reply(fixture('spotify-episode.html'))],
+    [has('itunes.apple.com/search', 'country=us'), reply(fixture('apple-search.json'))],
+    [has('itunes.apple.com/lookup', 'id=1200361736'), reply(LOOKUP)],
+  ]);
+  assert.deepEqual(await resolvePodcastLink(SPOTIFY, { fetch }), {
+    mediaUrl: MEASLES_MP3, title: 'Measles Is Officially Back. What Now?', show: 'The Daily', service: 'Spotify',
+  });
+});
+
+test('resolve: Spotify tries the Mac region first, then the US', async () => {
+  const fetch = fakeFetch([
+    [has('open.spotify.com/episode/'), reply(fixture('spotify-episode.html'))],
+    [has('itunes.apple.com/search', 'country=de'), reply({ resultCount: 1, results: [{ kind: 'podcast', collectionId: 1, collectionName: 'Die Daily' }] })],
+    [has('itunes.apple.com/search', 'country=us'), reply(fixture('apple-search.json'))],
+    [has('itunes.apple.com/lookup', 'id=1200361736'), reply(LOOKUP)],
+  ]);
+  const r = await resolvePodcastLink(SPOTIFY, { fetch, regions: ['de', 'us', 'de'] });
+  assert.equal(r.mediaUrl, MEASLES_MP3);
+  assert.equal(fetch.calls.filter((u) => u.includes('/search')).length, 2);
+});
+
+test('resolve: Spotify episode not in recent lookup falls back to the feed', async () => {
+  const fetch = fakeFetch([
+    [has('open.spotify.com/episode/'), reply(fixture('spotify-episode.html'))],
+    [has('itunes.apple.com/search'), reply(fixture('apple-search.json'))],
+    [has('itunes.apple.com/lookup'), reply(lookupWithout('1000803574143'))],
+    [has('feeds.simplecast.com/Sl5CSM3S'), reply(FEED_WITH_MEASLES)],
+  ]);
+  assert.equal((await resolvePodcastLink(SPOTIFY, { fetch })).mediaUrl, 'https://example.com/audio/measles.mp3');
+});
+
+test('resolve: Spotify error cases', async () => {
+  const page = [has('open.spotify.com/episode/'), reply(fixture('spotify-episode.html'))];
+  await rejectsWith(resolvePodcastLink(SPOTIFY, { fetch: fakeFetch([[has('open.spotify.com'), reply('<html></html>')]]) }), 'SPOTIFY_UNREADABLE');
+  await rejectsWith(resolvePodcastLink(SPOTIFY, { fetch: fakeFetch([page,
+    [has('itunes.apple.com/search'), reply({ resultCount: 0, results: [] })]]) }), 'SHOW_NOT_FOUND');
+  await rejectsWith(resolvePodcastLink(SPOTIFY, { fetch: fakeFetch([page,
+    [has('itunes.apple.com/search'), reply(fixture('apple-search.json'))],
+    [has('itunes.apple.com/lookup'), reply(lookupWithout('1000803574143'))],
+    [has('feeds.simplecast.com'), reply(fixture('feed.xml'))]]) }), 'EPISODE_NOT_FOUND');
+});
+
+test('resolve: show links fail without any request', async () => {
+  for (const url of ['https://open.spotify.com/show/3IM0lmZxpFAY7CwMuv9H4g', 'https://podcasts.apple.com/us/podcast/the-daily/id1200361736']) {
+    const fetch = fakeFetch([]);
+    await rejectsWith(resolvePodcastLink(url, { fetch }), 'SHOW_LINK');
+    assert.equal(fetch.calls.length, 0);
+  }
+});
+
+test('resolve: spotify.link short links', async () => {
+  const rest = [
+    [has('open.spotify.com/episode/'), reply(fixture('spotify-episode.html'))],
+    [has('itunes.apple.com/search'), reply(fixture('apple-search.json'))],
+    [has('itunes.apple.com/lookup'), reply(LOOKUP)],
+  ];
+  const redirected = fakeFetch([[has('spotify.link/'), reply('', { url: `${SPOTIFY}?si=x` })], ...rest]);
+  assert.equal((await resolvePodcastLink('https://spotify.link/AbC', { fetch: redirected })).mediaUrl, MEASLES_MP3);
+  const inBody = fakeFetch([[has('spotify.link/'), reply(`<a href="${SPOTIFY}?si=1">open</a>`, { url: 'https://spotify.app.link/x' })], ...rest]);
+  assert.equal((await resolvePodcastLink('https://spotify.link/AbC', { fetch: inBody })).mediaUrl, MEASLES_MP3);
+  const neither = fakeFetch([[has('spotify.link/'), reply('<html></html>', { url: 'https://spotify.app.link/x' })]]);
+  await rejectsWith(resolvePodcastLink('https://spotify.link/AbC', { fetch: neither }), 'SPOTIFY_UNREADABLE');
+  const toShow = fakeFetch([[has('spotify.link/'), reply('', { url: 'https://open.spotify.com/show/3IM0lmZxpFAY7CwMuv9H4g' })]]);
+  await rejectsWith(resolvePodcastLink('https://spotify.link/AbC', { fetch: toShow }), 'SHOW_LINK');
+});
+
+test('resolve: network failures map to NETWORK', async () => {
+  await rejectsWith(resolvePodcastLink(APPLE, { fetch: fakeFetch([[() => true, new TypeError('fetch failed')]]) }), 'NETWORK');
+  await rejectsWith(resolvePodcastLink(APPLE, { fetch: fakeFetch([[() => true, reply('', { status: 503 })]]) }), 'NETWORK');
+  const timeout = Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
+  await rejectsWith(resolvePodcastLink(APPLE, { fetch: fakeFetch([[() => true, timeout]]) }), 'NETWORK');
+});
+
+test('resolve: oversized feeds are abandoned', async () => {
+  const fetch = fakeFetch([
+    [has('itunes.apple.com/lookup'), reply(lookupWithout('1000803574143'))],
+    [has('podcasts.apple.com/'), reply(fixture('apple-episode.html'))],
+    [has('feeds.simplecast.com'), reply(FEED_WITH_MEASLES, { headers: { 'content-length': String(21 * 1024 * 1024) } })],
+  ]);
+  await rejectsWith(resolvePodcastLink(APPLE, { fetch }), 'EPISODE_NOT_FOUND');
+});
+
+test('podcastErrorMessage', () => {
+  assert.equal(podcastErrorMessage(new PodcastLinkError('SHOW_LINK')), 'This is a link to a whole show. Paste a link to a single episode.');
+  assert.equal(podcastErrorMessage(new Error('x')), "Couldn't load this podcast link.");
+});
