@@ -15,6 +15,7 @@ const api = {
   summarize: (text) => ipcRenderer.invoke('summarize', text),
   cancelSummary: () => ipcRenderer.invoke('cancel-summary'),
   resolvePodcastLink: (url) => ipcRenderer.invoke('resolve-podcast-link', url),
+  expandPodcastLink: (url) => ipcRenderer.invoke('expand-podcast-link', url),
   transcribe: (filePath, startSec, endSec, displayName) => ipcRenderer.invoke('transcribe', filePath, startSec, endSec, displayName),
   cancelTranscription: () => ipcRenderer.invoke('cancel-transcription'),
   getWaveformPeaks: (filePath) => ipcRenderer.invoke('get-waveform-peaks', filePath),

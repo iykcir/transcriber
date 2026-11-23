@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const {
-  parseSpotifyEpisodePage, parseAppleEpisodeTitle, parseAppleLookup, parseRssItems,
+  parseSpotifyEpisodePage, parseAppleEpisodePage, parseAppleLookup, parseRssItems,
   normalizeTitle, matchEpisode,
 } = require('../src/podcast-link');
 
@@ -31,9 +31,16 @@ test('parseSpotifyEpisodePage decodes entities', () => {
   assert.equal(r.durationSec, null);
 });
 
-test('parseAppleEpisodeTitle reads og:title', () => {
-  assert.equal(parseAppleEpisodeTitle(fixture('apple-episode.html')), 'Measles Is Officially Back. What Now?');
-  assert.equal(parseAppleEpisodeTitle('<html></html>'), null);
+test('parseAppleEpisodePage reads title, date and length', () => {
+  assert.deepEqual(parseAppleEpisodePage(fixture('apple-episode.html')), {
+    title: 'Measles Is Officially Back. What Now?', date: Date.parse('2026-11-23'), durationSec: 1430,
+  });
+  assert.equal(parseAppleEpisodePage('<html></html>'), null);
+});
+
+test('parseAppleEpisodePage falls back to og:title when there is no structured data', () => {
+  assert.deepEqual(parseAppleEpisodePage('<meta property="og:title" content="Just a Title">'),
+    { title: 'Just a Title', date: null, durationSec: null });
 });
 
 test('parseAppleLookup returns show, feed and episodes', () => {
@@ -326,4 +333,64 @@ test('resolve: a non-web media address from a feed is refused', async () => {
     [has('feeds.simplecast.com'), reply(feed)],
   ]);
   await rejectsWith(resolvePodcastLink(APPLE, { fetch }), 'EPISODE_NOT_FOUND');
+});
+
+// ── Deferred minors ──────────────────────────────────────────────────────────
+const { expandPodcastLink } = require('../src/podcast-link');
+
+test('normalizeTitle sees through entities encoded twice', () => {
+  assert.equal(normalizeTitle('Tom &amp; It&#8217;s Back'), normalizeTitle("Tom & It's Back"));
+  const [item] = parseRssItems('<item><title>Tom &amp;amp; Jerry</title><enclosure url="https://x/a.mp3"/></item>');
+  assert.equal(matchEpisode({ title: 'Tom & Jerry', date: null, durationSec: null }, [item]), item);
+});
+
+const olderApple = (feedRoute) => fakeFetch([
+  [has('itunes.apple.com/lookup'), reply(lookupWithout('1000803574143'))],
+  [has('podcasts.apple.com/'), reply(fixture('apple-episode.html'))],
+  feedRoute,
+]);
+
+test('resolve: losing the connection during the feed step is a network problem', async () => {
+  await rejectsWith(resolvePodcastLink(APPLE, { fetch: olderApple([has('feeds.simplecast.com'), new TypeError('fetch failed')]) }), 'NETWORK');
+  const timeout = Object.assign(new Error('timed out'), { name: 'TimeoutError' });
+  await rejectsWith(resolvePodcastLink(APPLE, { fetch: olderApple([has('feeds.simplecast.com'), timeout]) }), 'NETWORK');
+});
+
+test('resolve: a feed host answering with an error still means episode not found', async () => {
+  await rejectsWith(resolvePodcastLink(APPLE, { fetch: olderApple([has('feeds.simplecast.com'), reply('', { status: 500 })]) }), 'EPISODE_NOT_FOUND');
+});
+
+test('resolve: a feed with no size header stops downloading at 20 MB', async () => {
+  let pulled = 0;
+  const chunk = new Uint8Array(1024 * 1024).fill(32);
+  const body = new ReadableStream({ pull(c) { pulled++; if (pulled > 40) c.close(); else c.enqueue(chunk); } });
+  const res = { ok: true, status: 200, headers: { get: () => null }, body,
+    text: async () => { throw new Error('read the whole body'); } };
+  await rejectsWith(resolvePodcastLink(APPLE, { fetch: olderApple([has('feeds.simplecast.com'), res]) }), 'EPISODE_NOT_FOUND');
+  assert.ok(pulled >= 20 && pulled <= 22, `pulled ${pulled} MB`);
+});
+
+test('resolve: a streamed feed under the cap is read normally', async () => {
+  const bytes = new TextEncoder().encode(FEED_WITH_MEASLES);
+  const body = new ReadableStream({ start(c) { c.enqueue(bytes.slice(0, 100)); c.enqueue(bytes.slice(100)); c.close(); } });
+  const res = { ok: true, status: 200, headers: { get: () => null }, body, text: async () => { throw new Error('unused'); } };
+  assert.equal((await resolvePodcastLink(APPLE, { fetch: olderApple([has('feeds.simplecast.com'), res]) })).mediaUrl,
+    'https://example.com/audio/measles.mp3');
+});
+
+test('resolve: an older Apple episode with a same-titled re-run picks the one from its date', async () => {
+  const feed = FEED_WITH_MEASLES.replace('</channel>',
+    '<item><title>Measles Is Officially Back. What Now?</title><pubDate>Mon, 03 Mar 2025 10:00:00 GMT</pubDate>'
+    + '<enclosure url="https://example.com/audio/measles-2025.mp3"/></item></channel>');
+  const r = await resolvePodcastLink(APPLE, { fetch: olderApple([has('feeds.simplecast.com'), reply(feed)]) });
+  assert.equal(r.mediaUrl, 'https://example.com/audio/measles.mp3');
+});
+
+test('expandPodcastLink follows short links and leaves other links alone', async () => {
+  const redirected = fakeFetch([[has('spotify.link/'), reply('', { url: 'https://open.spotify.com/show/3IM0lmZxpFAY7CwMuv9H4g?si=1' })]]);
+  assert.equal(await expandPodcastLink('https://spotify.link/AbC', { fetch: redirected }), 'https://open.spotify.com/show/3IM0lmZxpFAY7CwMuv9H4g');
+  const none = fakeFetch([]);
+  assert.equal(await expandPodcastLink(SPOTIFY, { fetch: none }), SPOTIFY);
+  assert.equal(none.calls.length, 0);
+  await rejectsWith(expandPodcastLink('https://spotify.link/AbC', { fetch: fakeFetch([[has('spotify.link/'), reply('<html></html>')]]) }), 'SPOTIFY_UNREADABLE');
 });

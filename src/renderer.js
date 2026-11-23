@@ -292,10 +292,28 @@ function resetForNewMedia() {
   setState('loaded');
 }
 
+let linkRequest = 0;
 async function loadUrl(url) {
   if (!url || !guardLoadMedia()) return;
+  const request = ++linkRequest;
   let parsed;
-  const podcast = UiLogic.podcastLinkKind(url);
+  let podcast = UiLogic.podcastLinkKind(url);
+  // A spotify.link short link could lead to an episode or a whole show; find
+  // out first, so a show link leaves the current media alone.
+  if (podcast?.service === 'spotify-short') {
+    const generation = mediaGeneration;
+    let expanded;
+    try {
+      expanded = await api.expandPodcastLink(url);
+    } catch (e) {
+      if (request === linkRequest && generation === mediaGeneration) showError(UiLogic.errorMessage(e));
+      return;
+    }
+    if (request !== linkRequest || generation !== mediaGeneration || !guardLoadMedia()) return;
+    url = expanded;
+    podcast = UiLogic.podcastLinkKind(url);
+    if (!podcast || podcast.service === 'spotify-short') { showError("Couldn't read this Spotify link. Check that it's a podcast episode."); return; }
+  }
   if (podcast?.service === 'spotify-show' || podcast?.service === 'apple-show') {
     showError('This is a link to a whole show. Paste a link to a single episode.');
     return;
@@ -341,6 +359,7 @@ async function loadPodcastLink(url, service) {
   setDropzoneFile('Finding episode…', service);
   urlInput.value = '';
   resetForNewMedia();
+  hideWaveform(); // the previous media's waveform and preview don't belong under the placeholder
   transcribeBtn.disabled = true;
   const generation = mediaGeneration;
   let episode;

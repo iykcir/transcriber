@@ -247,6 +247,15 @@ ipcMain.handle('resolve-podcast-link', async (_, url) => {
     if (podcastController === controller) podcastController = null;
   }
 });
+// spotify.link short link → the open.spotify.com link it stands for.
+ipcMain.handle('expand-podcast-link', async (_, url) => {
+  const { expandPodcastLink, podcastErrorMessage } = require('./podcast-link');
+  try {
+    return await expandPodcastLink(String(url), { fetch: net.fetch });
+  } catch (err) {
+    throw new Error(podcastErrorMessage(err), { cause: err });
+  }
+});
 
 // Shows progress on the Dock icon and, if the user has switched away, a
 // notification when the run ends.

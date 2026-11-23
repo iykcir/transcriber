@@ -75,8 +75,29 @@ function parseSpotifyEpisodePage(html) {
 }
 
 /** @param {string} html */
-function parseAppleEpisodeTitle(html) {
-  return metaContent(html, 'og:title') || null;
+function parseAppleEpisodePage(html) {
+  /** @type {any} */
+  let episode = null;
+  for (const m of html.matchAll(/<script\b[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
+    try {
+      const data = JSON.parse(m[1]);
+      if (data?.['@type'] === 'PodcastEpisode') { episode = data; break; }
+    } catch { /* not JSON we can use */ }
+  }
+  const title = (typeof episode?.name === 'string' && episode.name.trim()) || metaContent(html, 'og:title');
+  if (!title) return null;
+  return {
+    title: decodeEntities(title),
+    date: parseDate(typeof episode?.datePublished === 'string' ? episode.datePublished : null),
+    durationSec: parseIsoDuration(episode?.duration),
+  };
+}
+
+/** Seconds from an ISO 8601 duration such as "PT23M50S" or "PT1H2M3S"; null otherwise. */
+function parseIsoDuration(s) {
+  const m = /^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$/.exec(typeof s === 'string' ? s.trim() : '');
+  if (!m || !(m[1] || m[2] || m[3])) return null;
+  return Number(m[1] ?? 0) * 3600 + Number(m[2] ?? 0) * 60 + Number(m[3] ?? 0);
 }
 
 /**
@@ -131,7 +152,14 @@ function parseRssItems(xml) {
 
 /** @param {string} s */
 function normalizeTitle(s) {
-  return String(s ?? '')
+  // Some feeds encode entities twice (`&amp;amp;`), so decode until stable.
+  let text = String(s ?? '');
+  for (let i = 0; i < 3; i++) {
+    const next = decodeEntities(text);
+    if (next === text) break;
+    text = next;
+  }
+  return text
     .normalize('NFKC')
     .toLowerCase()
     .replace(/[‘’‚‛′]/g, "'")
@@ -201,6 +229,8 @@ class PodcastLinkError extends Error {
     super(MESSAGES[code], options);
     this.name = 'PodcastLinkError';
     this.code = code;
+    /** HTTP status when the server answered with an error; undefined when the request itself failed. */
+    this.httpStatus = /** @type {number | undefined} */ (undefined);
   }
 }
 
@@ -230,7 +260,9 @@ async function get(http, url, missingCode = 'NETWORK') {
   }
   if (!res.ok) {
     const code = res.status >= 500 || res.status === 429 ? 'NETWORK' : missingCode;
-    throw new PodcastLinkError(code, { cause: new Error(`HTTP ${res.status} for ${url}`) });
+    const err = new PodcastLinkError(code, { cause: new Error(`HTTP ${res.status} for ${url}`) });
+    err.httpStatus = res.status;
+    throw err;
   }
   return res;
 }
@@ -250,12 +282,46 @@ async function getJson(http, url) {
 async function feedEpisodes(http, feedUrl) {
   if (!feedUrl) return [];
   let res;
-  try { res = await get(http, feedUrl); } catch { return []; }
+  try {
+    res = await get(http, feedUrl);
+  } catch (err) {
+    // A feed host answering with an error means no episodes from it; a
+    // request that never got an answer (offline, timeout) is a network problem.
+    if (err instanceof PodcastLinkError && err.httpStatus !== undefined) return [];
+    throw err;
+  }
   if (Number(res.headers?.get?.('content-length') ?? 0) > MAX_FEED_BYTES) return [];
-  let xml;
-  try { xml = await res.text(); } catch { return []; }
-  if (xml.length > MAX_FEED_BYTES) return [];
-  return parseRssItems(xml);
+  const xml = await readCapped(res, MAX_FEED_BYTES);
+  return xml == null ? [] : parseRssItems(xml);
+}
+
+/**
+ * The response body as text, or null once it passes `maxBytes`: the download
+ * stops there rather than reading a huge feed into memory first.
+ */
+async function readCapped(res, maxBytes) {
+  try {
+    const reader = res.body?.getReader?.();
+    if (!reader) {
+      const text = await res.text();
+      return Buffer.byteLength(text) > maxBytes ? null : text;
+    }
+    const chunks = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        reader.cancel().catch(() => {});
+        return null;
+      }
+      chunks.push(value);
+    }
+    return Buffer.concat(chunks.map((c) => Buffer.from(c.buffer, c.byteOffset, c.byteLength))).toString('utf8');
+  } catch (err) {
+    throw new PodcastLinkError('NETWORK', { cause: err });
+  }
 }
 
 /** @param {Http} http @param {string} showId @param {string} country */
@@ -276,9 +342,9 @@ async function resolveApple(http, url, { showId, episodeId, country }) {
   const lookup = await lookupShow(http, showId, country);
   const hit = lookup.episodes.find((e) => e.trackId === episodeId);
   if (hit) return found(hit, lookup.show, 'Apple Podcasts');
-  const title = parseAppleEpisodeTitle(await getText(http, url, 'EPISODE_NOT_FOUND'));
-  if (!title) throw new PodcastLinkError('EPISODE_NOT_FOUND');
-  const match = matchEpisode({ title, date: null, durationSec: null }, await feedEpisodes(http, lookup.feedUrl));
+  const target = parseAppleEpisodePage(await getText(http, url, 'EPISODE_NOT_FOUND'));
+  if (!target) throw new PodcastLinkError('EPISODE_NOT_FOUND');
+  const match = matchEpisode(target, await feedEpisodes(http, lookup.feedUrl));
   if (!match) throw new PodcastLinkError('EPISODE_NOT_FOUND');
   return found(match, lookup.show, 'Apple Podcasts');
 }
@@ -343,17 +409,36 @@ function sameEpisode(a, b) {
     && a.durationSec != null && b.durationSec != null && Math.abs(a.durationSec - b.durationSec) <= 2;
 }
 
-/** Follows a spotify.link short link to the open.spotify.com URL it stands for. */
+/** Follows a spotify.link short link to the open.spotify.com URL it stands for (without query). */
 async function expandSpotifyShortLink(http, url) {
   const res = await get(http, url, 'SPOTIFY_UNREADABLE');
-  const finalKind = podcastLinkKind(res.url ?? '');
-  if (finalKind && finalKind.service !== 'spotify-short') return finalKind;
+  const isSpotify = (u) => { const k = podcastLinkKind(u); return !!k && k.service !== 'spotify-short' && k.service !== 'apple' && k.service !== 'apple-show'; };
+  if (res.url && isSpotify(res.url)) {
+    const u = new URL(res.url);
+    return `${u.origin}${u.pathname}`;
+  }
   let body = '';
   try { body = await res.text(); } catch { /* fall through */ }
   const m = /https:\/\/open\.spotify\.com\/(?:intl-[a-z-]+\/)?(?:episode|show)\/[A-Za-z0-9]{22}/i.exec(body);
-  const kind = m ? podcastLinkKind(m[0]) : null;
-  if (!kind) throw new PodcastLinkError('SPOTIFY_UNREADABLE');
-  return kind;
+  if (!m || !isSpotify(m[0])) throw new PodcastLinkError('SPOTIFY_UNREADABLE');
+  return m[0];
+}
+
+/**
+ * The link a short link stands for, so the app can tell an episode from a
+ * show before it changes anything on screen. Other links come back unchanged.
+ * @param {string} url
+ * @param {{fetch: FetchLike, signal?: AbortSignal}} deps
+ * @returns {Promise<string>}
+ */
+async function expandPodcastLink(url, { fetch, signal }) {
+  if (podcastLinkKind(url)?.service !== 'spotify-short') return url;
+  try {
+    return await expandSpotifyShortLink({ fetch, signal }, url);
+  } catch (err) {
+    if (err instanceof PodcastLinkError) throw err;
+    throw new PodcastLinkError('OTHER', { cause: err });
+  }
 }
 
 /**
@@ -365,7 +450,7 @@ async function resolvePodcastLink(url, { fetch, regions = ['us'], signal }) {
   const http = { fetch, signal };
   try {
     let kind = podcastLinkKind(url);
-    if (kind?.service === 'spotify-short') kind = await expandSpotifyShortLink(http, url);
+    if (kind?.service === 'spotify-short') kind = podcastLinkKind(await expandSpotifyShortLink(http, url));
     if (!kind) throw new PodcastLinkError('OTHER');
     if (kind.service === 'spotify-show' || kind.service === 'apple-show') throw new PodcastLinkError('SHOW_LINK');
     if (kind.service === 'apple') return await resolveApple(http, url, kind);
@@ -381,7 +466,7 @@ async function resolvePodcastLink(url, { fetch, regions = ['us'], signal }) {
 }
 
 module.exports = {
-  parseSpotifyEpisodePage, parseAppleEpisodeTitle, parseAppleLookup, parseRssItems,
+  parseSpotifyEpisodePage, parseAppleEpisodePage, parseAppleLookup, parseRssItems,
   normalizeTitle, matchEpisode,
-  PodcastLinkError, resolvePodcastLink, podcastErrorMessage,
+  PodcastLinkError, resolvePodcastLink, expandPodcastLink, podcastErrorMessage,
 };
