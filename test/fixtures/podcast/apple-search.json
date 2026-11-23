@@ -1,0 +1,29 @@
+{
+ "resultCount": 3,
+ "results": [
+  {
+   "wrapperType": "track",
+   "kind": "podcast",
+   "collectionId": 1200361736,
+   "collectionName": "The Daily",
+   "artistName": "The New York Times",
+   "feedUrl": "https://feeds.simplecast.com/Sl5CSM3S"
+  },
+  {
+   "wrapperType": "track",
+   "kind": "podcast",
+   "collectionId": 1469394914,
+   "collectionName": "The Journal.",
+   "artistName": "The Wall Street Journal & Spotify Studios",
+   "feedUrl": "https://video-api.shdsvc.dowjones.io/api/podcasts/the%20journal/feed"
+  },
+  {
+   "wrapperType": "track",
+   "kind": "podcast",
+   "collectionId": 1222114325,
+   "collectionName": "Up First from NPR",
+   "artistName": "NPR",
+   "feedUrl": "https://feeds.npr.org/510318/podcast.xml"
+  }
+ ]
+}

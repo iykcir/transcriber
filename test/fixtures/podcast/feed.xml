@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
+<channel>
+<title>The Daily</title>
+<item>
+  <title><![CDATA[Q&amp;A: Ask Us Anything]]></title>
+  <pubDate>Fri, 01 Mar 2024 10:45:00 -0000</pubDate>
+  <itunes:duration>1:02:03</itunes:duration>
+  <enclosure url="https://example.com/audio/qa.mp3?x=1&amp;y=2" length="1" type="audio/mpeg"/>
+</item>
+<item>
+  <title>An Old Episode About Measles</title>
+  <pubDate>Mon, 03 Jun 2024 09:00:00 GMT</pubDate>
+  <itunes:duration>1430</itunes:duration>
+  <enclosure url="https://example.com/audio/old-measles.mp3" length="1" type="audio/mpeg"/>
+</item>
+<item>
+  <title>The Best of 2023</title>
+  <pubDate>Tue, 02 Jan 2024 09:00:00 GMT</pubDate>
+  <enclosure url="https://example.com/audio/best-2024.mp3" length="1" type="audio/mpeg"/>
+</item>
+<item>
+  <title>The Best of 2023</title>
+  <pubDate>Mon, 06 Mar 2023 09:00:00 GMT</pubDate>
+  <itunes:duration>25:00</itunes:duration>
+  <enclosure url="https://example.com/audio/best-2023.mp3" length="1" type="audio/mpeg"/>
+</item>
+<item>
+  <title>It&#8217;s a &quot;Feed&quot; Episode</title>
+  <pubDate>Wed, 10 Jan 2024 09:00:00 GMT</pubDate>
+  <itunes:duration>600</itunes:duration>
+  <enclosure type="audio/mpeg" url='https://example.com/audio/feed.mp3'/>
+</item>
+</channel>
+</rss>
