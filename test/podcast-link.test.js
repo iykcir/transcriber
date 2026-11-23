@@ -268,3 +268,16 @@ test('podcastErrorMessage', () => {
   assert.equal(podcastErrorMessage(new PodcastLinkError('SHOW_LINK')), 'This is a link to a whole show. Paste a link to a single episode.');
   assert.equal(podcastErrorMessage(new Error('x')), "Couldn't load this podcast link.");
 });
+
+test('resolve: a Spotify page that 404s is an unreadable link, not a network problem', async () => {
+  const fetch = fakeFetch([[has('open.spotify.com/episode/'), reply('Not found', { status: 404 })]]);
+  await rejectsWith(resolvePodcastLink(SPOTIFY, { fetch }), 'SPOTIFY_UNREADABLE');
+});
+
+test('resolve: an Apple episode page that 404s is episode-not-found', async () => {
+  const fetch = fakeFetch([
+    [has('itunes.apple.com/lookup'), reply(lookupWithout('1000803574143'))],
+    [has('podcasts.apple.com/'), reply('Not found', { status: 404 })],
+  ]);
+  await rejectsWith(resolvePodcastLink(APPLE, { fetch }), 'EPISODE_NOT_FOUND');
+});

@@ -226,6 +226,28 @@ ipcMain.handle('summarize', async (_, text) => {
 });
 ipcMain.handle('cancel-summary', () => summaryController?.abort());
 
+// Spotify / Apple Podcasts episode link → the episode's public audio URL.
+// A newer request aborts the previous one; the renderer ignores late results.
+/** @type {AbortController | null} */
+let podcastController = null;
+ipcMain.handle('resolve-podcast-link', async (_, url) => {
+  const { resolvePodcastLink, podcastErrorMessage } = require('./podcast-link');
+  podcastController?.abort();
+  const controller = new AbortController();
+  podcastController = controller;
+  try {
+    return await resolvePodcastLink(String(url), {
+      fetch: net.fetch,
+      regions: [app.getLocaleCountryCode().toLowerCase(), 'us'].filter(Boolean),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    throw new Error(podcastErrorMessage(err), { cause: err });
+  } finally {
+    if (podcastController === controller) podcastController = null;
+  }
+});
+
 // Shows progress on the Dock icon and, if the user has switched away, a
 // notification when the run ends.
 function finishJob(outcome, displayName) {

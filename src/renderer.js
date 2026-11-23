@@ -275,6 +275,7 @@ function clearMedia() {
   clearSummary();
   transcriptEl.value = '';
   updateCharCount();
+  transcribeBtn.disabled = false;
   setState('empty');
 }
 
@@ -287,12 +288,19 @@ function resetForNewMedia() {
   clearSummary();
   transcriptEl.value = '';
   updateCharCount();
+  transcribeBtn.disabled = false;
   setState('loaded');
 }
 
 async function loadUrl(url) {
   if (!url || !guardLoadMedia()) return;
   let parsed;
+  const podcast = UiLogic.podcastLinkKind(url);
+  if (podcast?.service === 'spotify-show' || podcast?.service === 'apple-show') {
+    showError('This is a link to a whole show. Paste a link to a single episode.');
+    return;
+  }
+  if (podcast) return loadPodcastLink(url, podcast.service === 'apple' ? 'Apple Podcasts' : 'Spotify');
   try { parsed = new URL(url); } catch { showError('Invalid URL.'); return; }
 
   currentFilePath = url;
@@ -323,6 +331,33 @@ async function loadUrl(url) {
       }
     } catch {}
   }
+}
+
+// Spotify / Apple Podcasts episode: find its public audio first (main process),
+// then continue as a direct link. Transcribe stays disabled until it's known.
+async function loadPodcastLink(url, service) {
+  currentFilePath = null;
+  currentFileName = null;
+  setDropzoneFile('Finding episode…', service);
+  urlInput.value = '';
+  resetForNewMedia();
+  transcribeBtn.disabled = true;
+  const generation = mediaGeneration;
+  let episode;
+  try {
+    episode = await api.resolvePodcastLink(url);
+  } catch (e) {
+    if (generation !== mediaGeneration) return; // other media loaded meanwhile
+    clearMedia();
+    showError(UiLogic.errorMessage(e));
+    return;
+  }
+  if (generation !== mediaGeneration) return;
+  currentFilePath = episode.mediaUrl;
+  currentFileName = episode.title;
+  setDropzoneFile(episode.title, `${episode.service} · ${episode.show}`);
+  transcribeBtn.disabled = false;
+  loadWaveform(episode.mediaUrl);
 }
 
 // ── Drop Zone ─────────────────────────────────────────────────────────────────
@@ -793,6 +828,7 @@ async function openRecent(id) {
   mediaGeneration++;
   currentFilePath = entry.source;
   currentFileName = entry.fileName;
+  transcribeBtn.disabled = false;
   hideWaveform();
   clearError();
   setDropzoneFile(entry.name, `Saved transcript · ${UiLogic.relativeTime(entry.createdAt)}`);

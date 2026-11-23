@@ -202,22 +202,30 @@ function podcastErrorMessage(err) {
  * @typedef {{fetch: FetchLike, signal?: AbortSignal}} Http
  */
 
-/** GET `url`; any network failure, timeout or non-2xx becomes NETWORK. */
-async function get(http, url, init = {}) {
+/**
+ * GET `url`. Network failures, timeouts and 5xx become NETWORK; other non-2xx
+ * answers (the page doesn't exist) become `missingCode`.
+ * @param {Http} http @param {string} url @param {keyof typeof MESSAGES} [missingCode]
+ */
+async function get(http, url, missingCode = 'NETWORK') {
   const timeout = AbortSignal.timeout(TIMEOUT_MS);
   const signal = http.signal ? AbortSignal.any([http.signal, timeout]) : timeout;
   let res;
   try {
-    res = await http.fetch(url, { redirect: 'follow', ...init, signal });
+    res = await http.fetch(url, { redirect: 'follow', signal });
   } catch (err) {
     throw new PodcastLinkError('NETWORK', { cause: err });
   }
-  if (!res.ok) throw new PodcastLinkError('NETWORK', { cause: new Error(`HTTP ${res.status} for ${url}`) });
+  if (!res.ok) {
+    const code = res.status >= 500 || res.status === 429 ? 'NETWORK' : missingCode;
+    throw new PodcastLinkError(code, { cause: new Error(`HTTP ${res.status} for ${url}`) });
+  }
   return res;
 }
 
-async function getText(http, url) {
-  const res = await get(http, url);
+/** @param {Http} http @param {string} url @param {keyof typeof MESSAGES} [missingCode] */
+async function getText(http, url, missingCode) {
+  const res = await get(http, url, missingCode);
   try { return await res.text(); } catch (err) { throw new PodcastLinkError('NETWORK', { cause: err }); }
 }
 
@@ -254,7 +262,7 @@ async function resolveApple(http, url, { showId, episodeId, country }) {
   const lookup = await lookupShow(http, showId, country);
   const hit = lookup.episodes.find((e) => e.trackId === episodeId);
   if (hit) return found(hit, lookup.show, 'Apple Podcasts');
-  const title = parseAppleEpisodeTitle(await getText(http, url));
+  const title = parseAppleEpisodeTitle(await getText(http, url, 'EPISODE_NOT_FOUND'));
   if (!title) throw new PodcastLinkError('EPISODE_NOT_FOUND');
   const match = matchEpisode({ title, date: null, durationSec: null }, await feedEpisodes(http, lookup.feedUrl));
   if (!match) throw new PodcastLinkError('EPISODE_NOT_FOUND');
@@ -262,7 +270,7 @@ async function resolveApple(http, url, { showId, episodeId, country }) {
 }
 
 async function resolveSpotify(http, episodeId, regions) {
-  const target = parseSpotifyEpisodePage(await getText(http, `https://open.spotify.com/episode/${episodeId}`));
+  const target = parseSpotifyEpisodePage(await getText(http, `https://open.spotify.com/episode/${episodeId}`, 'SPOTIFY_UNREADABLE'));
   if (!target) throw new PodcastLinkError('SPOTIFY_UNREADABLE');
   const wantShow = normalizeTitle(target.show);
   let sawShow = false;
@@ -291,7 +299,7 @@ async function resolveSpotify(http, episodeId, regions) {
 
 /** Follows a spotify.link short link to the open.spotify.com URL it stands for. */
 async function expandSpotifyShortLink(http, url) {
-  const res = await get(http, url);
+  const res = await get(http, url, 'SPOTIFY_UNREADABLE');
   const finalKind = podcastLinkKind(res.url ?? '');
   if (finalKind && finalKind.service !== 'spotify-short') return finalKind;
   let body = '';

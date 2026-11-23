@@ -10,7 +10,7 @@ A native-feeling macOS desktop app for offline audio and video transcription, po
 | Drag & drop or browse | Drop a file anywhere on the window, click the drop zone, or use File → Open (⌘O) |
 | Record from microphone | Click **Record mic** to capture live audio |
 | Capture system audio | Click **System audio** to record whatever is playing on your Mac (meetings, podcasts, videos) |
-| URL | Paste a direct link to audio or video and press Enter or click **Load**; YouTube links are supported out of the box (the app manages its own `yt-dlp` binary, kept up to date automatically) |
+| URL | Paste a direct link to audio or video and press Enter or click **Load**; YouTube links are supported out of the box (the app manages its own `yt-dlp` binary, kept up to date automatically). Spotify and Apple Podcasts links to a single episode work too: the app finds the episode in the show's public feed. Spotify-only shows have no public feed, so they can't be transcribed |
 
 Once something is loaded, the drop zone collapses into a slim bar showing the file name and size. Click **Change** to pick another file, or **×** to close it and get back to the record and link options.
 
