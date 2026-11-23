@@ -149,21 +149,33 @@ function normalizeTitle(s) {
  * @returns {E | null}
  */
 function matchEpisode(target, episodes) {
+  const byTitle = titleMatches(target, episodes);
+  if (byTitle.sameTitle) return byTitle.near.length === 1 ? byTitle.near[0] : null;
+  const close = lengthMatches(target, episodes);
+  return close.length === 1 ? close[0] : null;
+}
+
+/**
+ * Episodes with the target's title, and those of them within 2 days of it.
+ * @template {Episode} E @param {EpisodeTarget} target @param {E[]} episodes
+ */
+function titleMatches(target, episodes) {
   const want = normalizeTitle(target.title);
-  const within = (a, b, ms) => a == null || b == null || Math.abs(a - b) <= ms;
+  const same = episodes.filter((e) => normalizeTitle(e.title) === want);
+  const near = same.filter((e) => e.date == null || target.date == null || Math.abs(e.date - target.date) <= 2 * DAY_MS);
+  return { sameTitle: same.length > 0, near };
+}
 
-  const sameTitle = episodes.filter((e) => normalizeTitle(e.title) === want);
-  if (sameTitle.length) {
-    const near = sameTitle.filter((e) => within(e.date, target.date, 2 * DAY_MS));
-    return near.length === 1 ? near[0] : null;
-  }
-
-  if (target.date == null || target.durationSec == null) return null;
+/**
+ * Episodes within a day of the target with nearly the same length.
+ * @template {Episode} E @param {EpisodeTarget} target @param {E[]} episodes
+ */
+function lengthMatches(target, episodes) {
+  if (target.date == null || target.durationSec == null) return [];
   const tolerance = Math.max(target.durationSec * 0.05, 30);
-  const close = episodes.filter((e) => e.date != null && e.durationSec != null
+  return episodes.filter((e) => e.date != null && e.durationSec != null
     && Math.abs(e.date - target.date) <= DAY_MS
     && Math.abs(e.durationSec - target.durationSec) <= tolerance);
-  return close.length === 1 ? close[0] : null;
 }
 
 // ── Resolving a link ──────────────────────────────────────────────────────────
@@ -255,6 +267,8 @@ async function lookupShow(http, showId, country) {
 /** @param {Episode} episode @param {string} show @param {'Spotify' | 'Apple Podcasts'} service */
 function found(episode, show, service) {
   if (!episode.mediaUrl) throw new PodcastLinkError('SUBSCRIBERS_ONLY');
+  // Feeds are publisher-controlled; only web addresses go on to ffmpeg.
+  if (!/^https?:\/\//i.test(episode.mediaUrl)) throw new PodcastLinkError('EPISODE_NOT_FOUND');
   return { mediaUrl: episode.mediaUrl, title: episode.title, show, service };
 }
 
@@ -282,19 +296,51 @@ async function resolveSpotify(http, episodeId, regions) {
       .slice(0, MAX_CANDIDATE_SHOWS);
     if (!candidates.length) continue;
     sawShow = true;
-    const lookups = [];
+    // Shows with the same name can each hold a plausible episode, so every
+    // candidate is weighed together: a title match anywhere beats a
+    // date-and-length match anywhere, and a tie is never broken by guessing.
+    /** @type {(Episode & {show: string})[]} */
+    const pool = [];
+    const add = (episodes, show) => {
+      for (const e of episodes) if (!pool.some((p) => sameEpisode(p, e))) pool.push({ ...e, show });
+    };
+    const shows = [];
     for (const c of candidates) {
       const lookup = await lookupShow(http, String(c.collectionId), region);
-      lookups.push({ lookup, feedUrl: lookup.feedUrl ?? c.feedUrl ?? null, show: lookup.show || c.collectionName });
-      const match = matchEpisode(target, lookup.episodes);
-      if (match) return found(match, lookups.at(-1).show, 'Spotify');
+      const show = lookup.show || c.collectionName;
+      shows.push({ feedUrl: lookup.feedUrl ?? c.feedUrl ?? null, show });
+      add(lookup.episodes, show);
     }
-    for (const { feedUrl, show } of lookups) {
-      const match = matchEpisode(target, await feedEpisodes(http, feedUrl));
-      if (match) return found(match, show, 'Spotify');
+    let pick = pickByTitle(target, pool);
+    if (!pick) {
+      for (const { feedUrl, show } of shows) add(await feedEpisodes(http, feedUrl), show);
+      pick = pickByTitle(target, pool);
     }
+    if (!pick) {
+      const close = lengthMatches(target, pool);
+      if (close.length === 1) pick = close[0];
+    }
+    if (pick) return found(pick, pick.show, 'Spotify');
   }
   throw new PodcastLinkError(sawShow ? 'EPISODE_NOT_FOUND' : 'SHOW_NOT_FOUND');
+}
+
+/**
+ * The one episode in `pool` with the target's title near its date; null when
+ * there is none. Several equally good ones fail rather than guess.
+ * @template {Episode} E @param {EpisodeTarget} target @param {E[]} pool
+ */
+function pickByTitle(target, pool) {
+  const { near } = titleMatches(target, pool);
+  if (near.length > 1) throw new PodcastLinkError('EPISODE_NOT_FOUND');
+  return near[0] ?? null;
+}
+
+/** The same episode seen twice, e.g. in Apple's list and in the feed. */
+function sameEpisode(a, b) {
+  if (a.mediaUrl && a.mediaUrl === b.mediaUrl) return true;
+  return a.date != null && b.date != null && Math.abs(a.date - b.date) <= 3600000
+    && a.durationSec != null && b.durationSec != null && Math.abs(a.durationSec - b.durationSec) <= 2;
 }
 
 /** Follows a spotify.link short link to the open.spotify.com URL it stands for. */

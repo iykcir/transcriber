@@ -281,3 +281,49 @@ test('resolve: an Apple episode page that 404s is episode-not-found', async () =
   ]);
   await rejectsWith(resolvePodcastLink(APPLE, { fetch }), 'EPISODE_NOT_FOUND');
 });
+
+// ── Final-review fixes ───────────────────────────────────────────────────────
+const twoShows = { resultCount: 2, results: [
+  { kind: 'podcast', collectionId: 111, collectionName: 'The Daily', feedUrl: 'https://feeds.example.com/one' },
+  { kind: 'podcast', collectionId: 1200361736, collectionName: 'The Daily', feedUrl: 'https://feeds.simplecast.com/Sl5CSM3S' },
+] };
+const otherShowLookup = { resultCount: 2, results: [
+  { wrapperType: 'track', kind: 'podcast', collectionId: 111, collectionName: 'The Daily', feedUrl: 'https://feeds.example.com/one' },
+  { kind: 'podcast-episode', trackId: 9, trackName: 'Something Else Entirely', releaseDate: '2026-11-23T08:00:00Z',
+    trackTimeMillis: 1440000, episodeUrl: 'https://example.com/wrong-show.mp3' },
+] };
+
+test('resolve: a title match in a later show beats a length match in an earlier one', async () => {
+  const fetch = fakeFetch([
+    [has('open.spotify.com/episode/'), reply(fixture('spotify-episode.html'))],
+    [has('itunes.apple.com/search'), reply(twoShows)],
+    [has('itunes.apple.com/lookup', 'id=111'), reply(otherShowLookup)],
+    [has('itunes.apple.com/lookup', 'id=1200361736'), reply(LOOKUP)],
+  ]);
+  assert.equal((await resolvePodcastLink(SPOTIFY, { fetch })).mediaUrl, MEASLES_MP3);
+});
+
+test('resolve: the same episode in the lookup and the feed is not ambiguous', async () => {
+  const renamed = structuredClone(LOOKUP);
+  renamed.results[1].trackName = 'Renamed on Apple';
+  const feed = fixture('feed.xml').replace('</channel>',
+    `<item><title>Renamed in the feed</title><pubDate>Sun, 23 Nov 2026 10:45:00 GMT</pubDate><itunes:duration>1430</itunes:duration>`
+    + `<enclosure url="${MEASLES_MP3.replace(/&/g, '&amp;')}"/></item></channel>`);
+  const fetch = fakeFetch([
+    [has('open.spotify.com/episode/'), reply(fixture('spotify-episode.html'))],
+    [has('itunes.apple.com/search'), reply(fixture('apple-search.json'))],
+    [has('itunes.apple.com/lookup'), reply(renamed)],
+    [has('feeds.simplecast.com'), reply(feed)],
+  ]);
+  assert.equal((await resolvePodcastLink(SPOTIFY, { fetch })).mediaUrl, MEASLES_MP3);
+});
+
+test('resolve: a non-web media address from a feed is refused', async () => {
+  const feed = FEED_WITH_MEASLES.replace('https://example.com/audio/measles.mp3', 'file:///etc/passwd');
+  const fetch = fakeFetch([
+    [has('itunes.apple.com/lookup'), reply(lookupWithout('1000803574143'))],
+    [has('podcasts.apple.com/'), reply(fixture('apple-episode.html'))],
+    [has('feeds.simplecast.com'), reply(feed)],
+  ]);
+  await rejectsWith(resolvePodcastLink(APPLE, { fetch }), 'EPISODE_NOT_FOUND');
+});
