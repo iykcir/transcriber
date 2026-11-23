@@ -131,7 +131,39 @@ function formatTopicTime(sec) {
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${s}` : `${m}:${s}`;
 }
 
+/**
+ * Classifies Spotify and Apple Podcasts links; null for anything else.
+ * @param {string} url
+ * @returns {{service: 'spotify', episodeId: string}
+ *   | {service: 'apple', showId: string, episodeId: string, country: string}
+ *   | {service: 'spotify-short' | 'spotify-show' | 'apple-show'} | null}
+ */
+function podcastLinkKind(url) {
+  const uri = /^spotify:episode:([A-Za-z0-9]{22})$/.exec(String(url ?? '').trim());
+  if (uri) return { service: 'spotify', episodeId: uri[1] };
+  let u;
+  try { u = new URL(url); } catch { return null; }
+  if (!/^https?:$/.test(u.protocol)) return null;
+  const host = u.hostname.toLowerCase();
+  if (host === 'spotify.link') return { service: 'spotify-short' };
+  if (host === 'open.spotify.com') {
+    const m = /^(?:\/intl-[a-z-]+)?\/(episode|show)\/([A-Za-z0-9]{22})\/?$/i.exec(u.pathname);
+    if (!m) return null;
+    return m[1].toLowerCase() === 'episode' ? { service: 'spotify', episodeId: m[2] } : { service: 'spotify-show' };
+  }
+  if (host === 'podcasts.apple.com') {
+    const show = /\/id(\d+)\/?$/.exec(u.pathname);
+    if (!show) return null;
+    const episodeId = u.searchParams.get('i');
+    if (!episodeId || !/^\d+$/.test(episodeId)) return { service: 'apple-show' };
+    const first = u.pathname.split('/').filter(Boolean)[0] ?? '';
+    const country = /^[a-z]{2}$/i.test(first) ? first.toLowerCase() : 'us';
+    return { service: 'apple', showId: show[1], episodeId, country };
+  }
+  return null;
+}
+
 const UiLogic = { shortcutAction, isCancelledError, errorMessage, progressText, canLoadMedia, relativeTime,
-  summaryView, shouldAutoSummarize, hasSpokenText, formatTopicTime };
+  summaryView, shouldAutoSummarize, hasSpokenText, formatTopicTime, podcastLinkKind };
 if (typeof module !== 'undefined') module.exports = UiLogic;
 else globalThis.UiLogic = UiLogic;

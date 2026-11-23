@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { shortcutAction, isCancelledError, progressText, canLoadMedia, errorMessage, relativeTime, summaryView, formatTopicTime, shouldAutoSummarize, hasSpokenText } = require('../src/ui-logic');
+const UiLogic = require('../src/ui-logic');
 
 const ctx = (state, o = {}) => ({ state, exportMenuOpen: false, settingsOpen: false, ...o });
 const key = (k, o = {}) => ({ key: k, metaKey: false, shiftKey: false, ...o });
@@ -160,4 +161,30 @@ test('hasSpokenText: real words count, with or without timestamps', () => {
 
 test('shouldAutoSummarize: skips a transcript that is only silence markers', () => {
   assert.equal(auto({ text: '[00:00:00.000 --> 00:00:10.000]   [BLANK_AUDIO]' }), false);
+});
+
+const k = UiLogic.podcastLinkKind;
+test('podcastLinkKind: spotify episode forms', () => {
+  const want = { service: 'spotify', episodeId: '4ZDqaBObIEQr68g4oXT15u' };
+  assert.deepEqual(k('https://open.spotify.com/episode/4ZDqaBObIEQr68g4oXT15u'), want);
+  assert.deepEqual(k('https://open.spotify.com/episode/4ZDqaBObIEQr68g4oXT15u?si=abc123'), want);
+  assert.deepEqual(k('https://open.spotify.com/intl-de/episode/4ZDqaBObIEQr68g4oXT15u'), want);
+  assert.deepEqual(k('spotify:episode:4ZDqaBObIEQr68g4oXT15u'), want);
+});
+test('podcastLinkKind: apple episode forms', () => {
+  assert.deepEqual(k('https://podcasts.apple.com/us/podcast/the-daily/id1200361736?i=1000803574143'),
+    { service: 'apple', showId: '1200361736', episodeId: '1000803574143', country: 'us' });
+  assert.deepEqual(k('https://podcasts.apple.com/GB/podcast/id1200361736?i=1000803574143'),
+    { service: 'apple', showId: '1200361736', episodeId: '1000803574143', country: 'gb' });
+  assert.deepEqual(k('https://podcasts.apple.com/podcast/id1200361736?i=1000803574143'),
+    { service: 'apple', showId: '1200361736', episodeId: '1000803574143', country: 'us' });
+});
+test('podcastLinkKind: show and short links', () => {
+  assert.deepEqual(k('https://open.spotify.com/show/3IM0lmZxpFAY7CwMuv9H4g'), { service: 'spotify-show' });
+  assert.deepEqual(k('https://podcasts.apple.com/us/podcast/the-daily/id1200361736'), { service: 'apple-show' });
+  assert.deepEqual(k('https://spotify.link/AbCdEf123'), { service: 'spotify-short' });
+});
+test('podcastLinkKind: everything else is null', () => {
+  for (const u of ['https://www.youtube.com/watch?v=x', 'https://example.com/a.mp3',
+    'https://open.spotify.com/track/4ZDqaBObIEQr68g4oXT15u', 'not a url', '']) assert.equal(k(u), null);
 });
