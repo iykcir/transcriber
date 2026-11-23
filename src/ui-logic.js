@@ -84,17 +84,20 @@ function canLoadMedia(state) {
  * regenerate keeps the previous summary on screen with an error line, so
  * what you see always matches what gets exported.
  * @param {{hasKey: boolean, summary: object | null, status: 'idle'|'running'|'error'}} s
+ * Without a key the Summarize button still shows, grayed out, so the feature
+ * can be found; `summarizeEnabled` is false until a key is saved.
  * @returns {{card: 'hidden'|'running'|'error'|'summary', showSummarizeButton: boolean,
- *            canRegenerate: boolean, showError: boolean}}
+ *            summarizeEnabled: boolean, canRegenerate: boolean, showError: boolean}}
  */
 function summaryView({ hasKey, summary, status }) {
   const failed = hasKey && status === 'error';
+  const base = { summarizeEnabled: hasKey };
   if (hasKey && status === 'running') {
-    return { card: 'running', showSummarizeButton: false, canRegenerate: false, showError: false };
+    return { card: 'running', showSummarizeButton: false, ...base, canRegenerate: false, showError: false };
   }
-  if (summary) return { card: 'summary', showSummarizeButton: false, canRegenerate: hasKey, showError: failed };
-  if (failed) return { card: 'error', showSummarizeButton: false, canRegenerate: true, showError: true };
-  return { card: 'hidden', showSummarizeButton: hasKey, canRegenerate: false, showError: false };
+  if (summary) return { card: 'summary', showSummarizeButton: false, ...base, canRegenerate: hasKey, showError: failed };
+  if (failed) return { card: 'error', showSummarizeButton: false, ...base, canRegenerate: true, showError: true };
+  return { card: 'hidden', showSummarizeButton: true, ...base, canRegenerate: false, showError: false };
 }
 
 /**

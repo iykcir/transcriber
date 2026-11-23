@@ -51,7 +51,7 @@ Downloaded automatically on first use and cached in `~/Library/Application Suppo
 ### Summaries
 A quick read on what a recording covers, so you can decide whether it's worth listening to. A **Summary** card above the transcript gives a 2–3 sentence overview and the 4–6 main topics in order. When the transcript has timestamps, each topic shows where it starts.
 
-- **Summarize** in the transcript footer creates one. **⟳** on the card makes a new one, for example after editing or translating the transcript. **▾** folds the card away, and the app remembers that choice.
+- **Summarize** in the transcript footer creates one. It's grayed out until you add an API key. **⟳** on the card makes a new one, for example after editing or translating the transcript. **▾** folds the card away, and the app remembers that choice.
 - **Summarize automatically after transcribing** (Settings) creates a summary as soon as each transcription finishes.
 - Summaries are saved with recent transcripts and included at the top of TXT, Markdown, DOCX and PDF exports.
 

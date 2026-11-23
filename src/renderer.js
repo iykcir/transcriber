@@ -877,6 +877,8 @@ function renderSummary() {
   summaryCard.hidden = view.card === 'hidden';
   summaryCard.dataset.view = view.card;
   btnSummarize.style.display = view.showSummarizeButton ? '' : 'none';
+  btnSummarize.disabled = !view.summarizeEnabled;
+  btnSummarize.title = view.summarizeEnabled ? '' : 'Add your Anthropic API key in Settings to summarize';
   summaryRegen.hidden = !(view.card === 'summary' && view.canRegenerate);
 
   const showSummary = view.card === 'summary';

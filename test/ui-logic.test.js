@@ -76,19 +76,19 @@ test('relativeTime', () => {
 
 const sum = { overview: 'O.', topics: [], createdAt: 0 };
 
-test('summaryView: no key, no summary hides everything', () => {
+test('summaryView: no key, no summary shows a grayed-out Summarize button', () => {
   assert.deepEqual(summaryView({ hasKey: false, summary: null, status: 'idle' }),
-    { card: 'hidden', showSummarizeButton: false, canRegenerate: false, showError: false });
+    { card: 'hidden', showSummarizeButton: true, summarizeEnabled: false, canRegenerate: false, showError: false });
 });
 
 test('summaryView: no key shows a saved summary read-only', () => {
   assert.deepEqual(summaryView({ hasKey: false, summary: sum, status: 'idle' }),
-    { card: 'summary', showSummarizeButton: false, canRegenerate: false, showError: false });
+    { card: 'summary', showSummarizeButton: false, summarizeEnabled: false, canRegenerate: false, showError: false });
 });
 
 test('summaryView: key and no summary offers the Summarize button', () => {
   assert.deepEqual(summaryView({ hasKey: true, summary: null, status: 'idle' }),
-    { card: 'hidden', showSummarizeButton: true, canRegenerate: false, showError: false });
+    { card: 'hidden', showSummarizeButton: true, summarizeEnabled: true, canRegenerate: false, showError: false });
 });
 
 test('summaryView: running shows the running card and no button', () => {
@@ -105,11 +105,13 @@ test('summaryView: error offers Retry', () => {
 
 test('summaryView: key and summary can regenerate', () => {
   assert.deepEqual(summaryView({ hasKey: true, summary: sum, status: 'idle' }),
-    { card: 'summary', showSummarizeButton: false, canRegenerate: true, showError: false });
+    { card: 'summary', showSummarizeButton: false, summarizeEnabled: true, canRegenerate: true, showError: false });
 });
 
 test('summaryView: without a key a stale running or error status falls back', () => {
   assert.equal(summaryView({ hasKey: false, summary: null, status: 'error' }).card, 'hidden');
+  assert.equal(summaryView({ hasKey: false, summary: null, status: 'error' }).showSummarizeButton, true);
+  assert.equal(summaryView({ hasKey: false, summary: null, status: 'running' }).summarizeEnabled, false);
   assert.equal(summaryView({ hasKey: false, summary: sum, status: 'running' }).card, 'summary');
 });
 
@@ -119,7 +121,7 @@ test('formatTopicTime is shared with the renderer', () => {
 
 test('summaryView: a failed regenerate keeps the old summary with an error line', () => {
   assert.deepEqual(summaryView({ hasKey: true, summary: sum, status: 'error' }),
-    { card: 'summary', showSummarizeButton: false, canRegenerate: true, showError: true });
+    { card: 'summary', showSummarizeButton: false, summarizeEnabled: true, canRegenerate: true, showError: true });
 });
 
 test('summaryView: a first-time failure shows the error card', () => {
